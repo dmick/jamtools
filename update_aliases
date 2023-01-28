@@ -1,0 +1,4 @@
+#!/bin/bash
+/home/ubuntu/parselists.py || exit 0
+sudo newaliases
+sudo postfix reload
