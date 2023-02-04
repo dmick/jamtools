@@ -1,7 +1,6 @@
 #!v/bin/python3
 
 import csv
-import json
 import itertools
 import os.path
 import re
@@ -33,19 +32,13 @@ def get_and_retry_on_rate_limit(sheet, sheetid, rng):
             if '429' not in str(err):
                 raise(err)
             sleeptime *= 2
-            print(f'\n{sheetid} {rng} failed w/ratelimit, pausing for {sleeptime} seconds', file=sys.stderr)
+            print(f'{sheetid} {rng} ratelimited; pausing for {sleeptime} seconds', file=sys.stderr)
             time.sleep(sleeptime)
             continue
 
     result = result.get('values', [])
 
     return result
-
-def cleanup(l):
-    # trim whitespace
-    for i, s in enumerate(l):
-        s = s.strip()
-        l[i] = s
 
 
 def get_creds_app_flow():
@@ -77,27 +70,21 @@ def get_creds_service_account():
 
 ALL_SETLISTS_SHEETID = '1hxuvHuYAYcxQlOE4KCaeoiSrgZC95OOk3B2Ciu6LAiM'
 FIELDS = {
-        'Default': [
-            'SONG',
-            'ARTIST',
-            'VOCAL',
-            'GUITAR 1',
-            'GUITAR 2',
-            'BASS',
-            'DRUMS',
-            'KEYS'
-        ],
-        '11/21/2022': [
-            'SONG',
-            'ARTIST',
-            'VOCAL',
-            'KEYS',
-            'KEYS 2',
-            'GUITAR',
-            'BASS',
-            'DRUMS'],
+        'Default': ['SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS',],
+        '11/21/2022': ['SONG', 'ARTIST', 'VOCAL', 'KEYS', 'KEYS 2', ('GUITAR', 'GUITAR 1'), 'BASS', 'DRUMS',],
+        '1/16/2023': ['SONG', 'ARTIST', 'VOCAL', ('GUITAR 1a', 'GUITAR 1'), ('GUITAR 1b', 'GUITAR 2'), 'BASS', 'DRUMS', 'KEYS',],
 }
 
+SYNTHESIZED_FIELDS = ['DATE', 'SONGNUM']
+# you might think "set", but these need to stay ordered, and it's simpler to just declare them
+ALLFIELDS = SYNTHESIZED_FIELDS + ['SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS', 'KEYS 2',]
+
+
+def stripws(l):
+    return [s.strip() for s in l]
+
+def cleanfields(fields):
+    return [f.lower().replace(' ', '')  for f in fields]
 
 def main():
     """Shows basic usage of the Sheets API.
@@ -106,68 +93,76 @@ def main():
     # creds = get_creds_app_flow()
     creds = get_creds_service_account()
 
-    do_json = False
-
     try:
         service = build('sheets', 'v4', credentials=creds)
-
         sheet = service.spreadsheets()
 
         # get the cross-reference of dates/setlist sheets
         date_and_ids = get_and_retry_on_rate_limit(sheet, ALL_SETLISTS_SHEETID, 'A:B')
 
+        # output, all dates/songs
         rows = []
-        # for row in date_and_ids:
-        for row in date_and_ids[-7:]:
-            sheetdate, sheetid = row[0], row[1]
-            colnames = get_and_retry_on_rate_limit(sheet, sheetid, 'C1:K1')[0]
+
+        for idrow in date_and_ids:
+            sheetdate, sheetid = idrow[0], idrow[1]
+            colnames = get_and_retry_on_rate_limit(sheet, sheetid, 'C1:L1')[0]
             # there was at least one setlist with "GUITAR 2 (Elec)".
             # Strip any parenthesized phrases
             colnames = [re.sub('\(.*\)', '', s) for s in colnames]
-            cleanup(colnames)
+            colnames = stripws(colnames)
 
-            fields = FIELDS.get(sheetdate, FIELDS['Default']).copy()
+            # allow columns to be in a different order or have
+            # column names we're ignoring
+            #
+            # rename some fields (noted in tuples in FIELDS
+            fields = FIELDS.get(sheetdate, FIELDS['Default'])
             colnums = []
-            for colname in fields:
+            ofields = SYNTHESIZED_FIELDS.copy()
+
+            for f in fields:
+                if isinstance(f, tuple):
+                    fieldname, fieldnewname = f
+                    print(f'{sheetdate}: renaming {fieldname} to {fieldnewname}', file=sys.stderr)
+                else:
+                    fieldname, fieldnewname = f, None
                 try:
-                    colnum = colnames.index(colname)
+                    colnum = colnames.index(fieldname)
                 except ValueError:
-                    print(f'no {colname} on {sheetdate}', file=sys.stderr)
+                    print(f'no {fieldname} on {sheetdate}??', file=sys.stderr)
                     continue
-                colnums.append(colnames.index(colname))
-            songs = get_and_retry_on_rate_limit(sheet, sheetid, 'C3:K')
+                colnums.append(colnames.index(fieldname))
+                ofields.append(fieldnewname or fieldname)
+
+            ofields = cleanfields(ofields)
+
+            songs = get_and_retry_on_rate_limit(sheet, sheetid, 'C3:L')
             for i, s in enumerate(songs):
-                if not s:
+                # dump blank lines or lines with nothing in the first column (song)
+                if not s or not s[0]:
                     continue
                 if 'Tune to recorded tuning' in s:
                     break
-                cleanup(s)
-                cols = [i, sheetdate]
-                for index in colnums:
+                s = stripws(s)
+                values = [sheetdate, i+1]
+                for colnum in colnums:
                     try:
-                        cols.append(s[index])
+                        values.append(s[colnum])
                     except IndexError:
-                    
                         pass
-                dbfields = ['songnum', 'date'] + \
-                    [f.lower().replace(' ', '')  for f in fields]
-                
-                if need_quoting:
-                    # do some domain-specific cleanup
-                    # quote 'em all: double any embedded single-quotes, then 
-                    # wrap in single-quotes
-                    dbvalues = []
-                    for v in cols:
-                        if isinstance(v, str):
-                            v = v.replace("'","''")
-                            v = v.replace('XX', '')
-                            v = f"'{v}'"
-                        dbvalues.append(v)
 
-                rows.append(dict(t for t in zip(dbfields, dbvalues)))
+                # do some domain-specific value cleanup
+                ovalues = []
+                for v in values:
+                    if isinstance(v, str):
+                        v = v.replace('XX', '')
+                    ovalues.append(v)
 
-        if do_json:
-            print(json.dumps(rows))
+                # row will have a subset of all the fields in ALLFIELDS
+                rows.append(dict(t for t in zip(ofields, ovalues)))
+
+        cw = csv.DictWriter(sys.stdout, cleanfields(ALLFIELDS))
+        cw.writeheader()
+        cw.writerows(rows)
 
     except HttpError as err:
         print(err)
