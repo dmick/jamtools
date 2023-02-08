@@ -1,0 +1,122 @@
+#!/usr/bin/python3
+
+
+import argparse
+import sys
+import datetime
+from collections import defaultdict
+import gzip
+import pprint
+import re
+import json
+
+def getfield(parts, name, stripchars='<>'):
+    try:
+        field = [i for i in parts if i.startswith(f'{name}=')][0]
+        field = field.split('=')[1]
+        field = field.strip(stripchars)
+        return field
+    except IndexError:
+        return None
+
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-t', '--to', help='To address to find')
+    ap.add_argument('-o', '--orig-to', help='orig_to address to find')
+    ap.add_argument('-T', '--truncate', action='store_true', help='Truncate "to" list')
+    ap.add_argument('-j', '--json', action='store_true', help='json output')
+    ap.add_argument('files', nargs='*')
+    return ap.parse_args()
+
+def output(msg, args):
+
+    def dt_to_str(dt):
+        if isinstance(dt, datetime.datetime):
+            return dt.isoformat()
+        return '<type unknown>'
+
+    if args.json:
+        json.dump(msg, fp=sys.stdout, indent=4, default=dt_to_str)
+    else:
+        print(f'{msg["dt"]} {msg["msgid"]} from {msg["fr"]}', end='')
+        if msg['orig_to']:
+            print(f' orig_to {msg["orig_to"]}', end='')
+        if args.truncate:
+            if args.to:
+                to = args.to
+            elif args.orig_to:
+                to=args.orig_to
+            to = [to]
+        else:
+            to = msg['to']
+
+        print(f' to {", ".join(to)}', end='')
+        if args.truncate:
+            print('...')
+        else:
+            print()
+        
+
+def main():
+    # msgs[qid] = {'from': fromstr, 'messageid': msgid, 
+    #                 'to': list(tostr1, tostr2, ..)}
+    msgs = defaultdict(
+        lambda: dict(dt=None, fr=None, msgid=None, to=list(), orig_to='')
+    )
+
+    args = parse_args()
+    for name in args.files:
+        if name.endswith('.gz'):
+            f = gzip.open(name, 'rt')
+        else:
+            f = open(name, 'r')
+
+        for line in f:
+            parts = line.split()
+            parts = [p.strip(' ,') for p in parts]
+
+            dt_parts = parts[0:3]
+            parts = parts[3:]
+            dtval=datetime.datetime.strptime(
+                ' '.join(dt_parts) + ' 2023','%b %d %H:%M:%S %Y')
+
+            # skip hostname, logger name/pid
+            parts = parts[2:]
+
+            to = getfield(parts, 'to')
+            messageid = getfield(parts, 'message-id')
+            fr = getfield(parts, 'from')
+            orig_to = getfield(parts, 'orig_to')
+
+            if to or messageid or fr or orig_to:
+                qid = parts.pop(0).rstrip(':')
+                md = msgs[qid]
+                md['dt'] = dtval
+
+            if to:
+                md['to'].append(to)
+
+            if messageid:
+                md['msgid'] = messageid
+
+            if fr:
+                md['fr'] = fr
+
+            if orig_to:
+                md['orig_to'] = orig_to
+
+        f.close()
+
+    truncate = False
+
+    for qid, msg in sorted(msgs.items(), key=lambda kv: kv[1]['dt']):
+        if args.to:
+            if not any([re.search(args.to, to) for to in msg['to']]):
+                continue
+        if args.orig_to:
+            if not msg['orig_to'] or not re.search(args.orig_to, msg['orig_to']):
+                continue
+        output(msg, args)
+
+if __name__ == "__main__":
+    sys.exit(main())
