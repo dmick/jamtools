@@ -1,5 +1,6 @@
 #!v/bin/python3
 
+import argparse
 import csv
 import itertools
 import os.path
@@ -41,27 +42,6 @@ def get_and_retry_on_rate_limit(sheet, sheetid, rng):
     return result
 
 
-def get_creds_app_flow():
-    creds = None
-    # The file token.json stores the user's access and refresh tokens, and is
-    # created automatically when the authorization flow completes for the first
-    # time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-    return creds
-
-
 def get_creds_service_account():
     creds = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
@@ -86,86 +66,108 @@ def stripws(l):
 def cleanfields(fields):
     return [f.lower().replace(' ', '')  for f in fields]
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--id', help='Google spreadsheet ID to read and csv-ize')
+    parser.add_argument('-d', '--date', help='Date corresponding to ID')
+    return parser.parse_args()
+
+def get_rows(sheetservice, sheetdate, sheetid):
+
+    # may throw HttpError
+    colnames = get_and_retry_on_rate_limit(sheetservice, sheetid, 'C1:L1')[0]
+
+    # there was at least one setlist with "GUITAR 2 (Elec)".
+    # Strip any parenthesized phrases
+    colnames = [re.sub('\(.*\)', '', s) for s in colnames]
+    colnames = stripws(colnames)
+
+    # allow columns to be in a different order or have
+    # column names we're ignoring
+    #
+    # rename some fields (noted in tuples in FIELDS
+    fields = FIELDS.get(sheetdate, FIELDS['Default'])
+    colnums = []
+    ofields = SYNTHESIZED_FIELDS.copy()
+
+    for f in fields:
+        if isinstance(f, tuple):
+            fieldname, fieldnewname = f
+            print(f'{sheetdate}: renaming {fieldname} to {fieldnewname}', file=sys.stderr)
+        else:
+            fieldname, fieldnewname = f, None
+        try:
+            colnum = colnames.index(fieldname)
+        except ValueError:
+            print(f'no {fieldname} on {sheetdate}??', file=sys.stderr)
+            continue
+        colnums.append(colnames.index(fieldname))
+        ofields.append(fieldnewname or fieldname)
+
+    ofields = cleanfields(ofields)
+
+    rows = []
+    songs = get_and_retry_on_rate_limit(sheetservice, sheetid, 'C3:L')
+    for i, s in enumerate(songs):
+        # drop blank lines or lines with nothing in the first column (song)
+        if not s or not s[0]:
+            continue
+        # 'Tune...' is our ending sentinel.  Maybe a bit fragile.
+        if 'Tune to recorded tuning' in s:
+            break
+
+        s = stripws(s)
+        values = [sheetdate, i+1]
+        for colnum in colnums:
+            try:
+                values.append(s[colnum])
+            except IndexError:
+                pass
+
+        # do some domain-specific value cleanup
+        ovalues = []
+        for v in values:
+            if isinstance(v, str):
+                v = v.replace('XX', '')
+            ovalues.append(v)
+
+        # row will have a subset of all the fields in ALLFIELDS
+        rows.append(dict(t for t in zip(ofields, ovalues)))
+
+    return rows
+
+
 def main():
     """Shows basic usage of the Sheets API.
     Prints values from a sample spreadsheet.
     """
-    # creds = get_creds_app_flow()
+    args = parse_args()
+
+    # hook up to the Google API
     creds = get_creds_service_account()
+    service = build('sheets', 'v4', credentials=creds)
+    sheetservice = service.spreadsheets()
 
-    try:
-        service = build('sheets', 'v4', credentials=creds)
-        sheet = service.spreadsheets()
+    rows = []
 
+    if (args.id and not args.date) or (args.date and not args.id):
+        print("Must supply both or neither of --date and --id", file=sys.stderr)
+        return 1
+
+    if args.id and args.date:
+        rows = (get_rows(sheetservice, args.date, args.id))
+    else:
         # get the cross-reference of dates/setlist sheets
-        date_and_ids = get_and_retry_on_rate_limit(sheet, ALL_SETLISTS_SHEETID, 'A:B')
-
-        # output, all dates/songs
-        rows = []
+        date_and_ids = get_and_retry_on_rate_limit(sheetservice, ALL_SETLISTS_SHEETID, 'A:B')
 
         for idrow in date_and_ids:
             sheetdate, sheetid = idrow[0], idrow[1]
-            colnames = get_and_retry_on_rate_limit(sheet, sheetid, 'C1:L1')[0]
-            # there was at least one setlist with "GUITAR 2 (Elec)".
-            # Strip any parenthesized phrases
-            colnames = [re.sub('\(.*\)', '', s) for s in colnames]
-            colnames = stripws(colnames)
+            rows += get_rows(sheetservice, sheetdate, sheetid)
 
-            # allow columns to be in a different order or have
-            # column names we're ignoring
-            #
-            # rename some fields (noted in tuples in FIELDS
-            fields = FIELDS.get(sheetdate, FIELDS['Default'])
-            colnums = []
-            ofields = SYNTHESIZED_FIELDS.copy()
+    cw = csv.DictWriter(sys.stdout, cleanfields(ALLFIELDS))
+    cw.writeheader()
+    cw.writerows(rows)
 
-            for f in fields:
-                if isinstance(f, tuple):
-                    fieldname, fieldnewname = f
-                    print(f'{sheetdate}: renaming {fieldname} to {fieldnewname}', file=sys.stderr)
-                else:
-                    fieldname, fieldnewname = f, None
-                try:
-                    colnum = colnames.index(fieldname)
-                except ValueError:
-                    print(f'no {fieldname} on {sheetdate}??', file=sys.stderr)
-                    continue
-                colnums.append(colnames.index(fieldname))
-                ofields.append(fieldnewname or fieldname)
-
-            ofields = cleanfields(ofields)
-
-            songs = get_and_retry_on_rate_limit(sheet, sheetid, 'C3:L')
-            for i, s in enumerate(songs):
-                # dump blank lines or lines with nothing in the first column (song)
-                if not s or not s[0]:
-                    continue
-                if 'Tune to recorded tuning' in s:
-                    break
-                s = stripws(s)
-                values = [sheetdate, i+1]
-                for colnum in colnums:
-                    try:
-                        values.append(s[colnum])
-                    except IndexError:
-                        pass
-
-                # do some domain-specific value cleanup
-                ovalues = []
-                for v in values:
-                    if isinstance(v, str):
-                        v = v.replace('XX', '')
-                    ovalues.append(v)
-
-                # row will have a subset of all the fields in ALLFIELDS
-                rows.append(dict(t for t in zip(ofields, ovalues)))
-
-        cw = csv.DictWriter(sys.stdout, cleanfields(ALLFIELDS))
-        cw.writeheader()
-        cw.writerows(rows)
-
-    except HttpError as err:
-        print(err)
 
 
 if __name__ == '__main__':
