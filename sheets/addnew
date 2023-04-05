@@ -1,0 +1,3 @@
+./fetch_sets.py --start $1 > new.csv
+sqlite-utils insert sets.db sets new.csv --csv -d
+sqlite-utils rebuild-fts sets.db sets

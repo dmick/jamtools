@@ -1,0 +1,5 @@
+# THIS DESTROYS CURRENT DATA
+./fetch_sets.py > sets.csv
+sqlite-utils drop-table --ignore sets.db sets
+sqlite-utils insert sets.db sets sets.csv --csv -d
+sqlite-utils enable-fts sets.db sets song artist vocal guitar1 guitar2 bass drums keys || sqlite-utils rebuild-fts sets.db sets
