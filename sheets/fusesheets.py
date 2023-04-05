@@ -66,11 +66,9 @@ def stripws(l):
 def cleanfields(fields):
     return [f.lower().replace(' ', '')  for f in fields]
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--id', help='Google spreadsheet ID to read and csv-ize')
-    parser.add_argument('-d', '--date', help='Date corresponding to ID')
-    return parser.parse_args()
+def date_to_int(datestr):
+    m, d, y = (int(f) for f in datestr.split('/'))
+    return f'{y}{m:02d}{d:02d}'
 
 def get_rows(sheetservice, sheetdate, sheetid):
 
@@ -117,7 +115,7 @@ def get_rows(sheetservice, sheetdate, sheetid):
             break
 
         s = stripws(s)
-        values = [sheetdate, i+1]
+        values = [date_to_int(sheetdate), i+1]
         for colnum in colnums:
             try:
                 values.append(s[colnum])
@@ -137,6 +135,13 @@ def get_rows(sheetservice, sheetdate, sheetid):
     return rows
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--id', help='Google spreadsheet ID to read and csv-ize')
+    parser.add_argument('-d', '--date', help='Date corresponding to ID')
+    parser.add_argument('-s', '--start', help='Date to start from "all sheets" list')
+    return parser.parse_args()
+
 def main():
     """Shows basic usage of the Sheets API.
     Prints values from a sample spreadsheet.
@@ -150,8 +155,13 @@ def main():
 
     rows = []
 
-    if (args.id and not args.date) or (args.date and not args.id):
+    id_and_date_args = int(args.id != None) + int(args.date != None)
+    if (id_and_date_args == 1):
         print("Must supply both or neither of --date and --id", file=sys.stderr)
+        return 1
+
+    if (id_and_date_args and args.start):
+        print("--id/--date and --start are mutually exclusive", file=sys.stderr)
         return 1
 
     if args.id and args.date:
@@ -160,14 +170,17 @@ def main():
         # get the cross-reference of dates/setlist sheets
         date_and_ids = get_and_retry_on_rate_limit(sheetservice, ALL_SETLISTS_SHEETID, 'A:B')
 
+        output = args.start is None
         for idrow in date_and_ids:
             sheetdate, sheetid = idrow[0], idrow[1]
-            rows += get_rows(sheetservice, sheetdate, sheetid)
+            if sheetdate == args.start:
+                output = True
+            if output:
+                rows += get_rows(sheetservice, sheetdate, sheetid)
 
     cw = csv.DictWriter(sys.stdout, cleanfields(ALLFIELDS))
     cw.writeheader()
     cw.writerows(rows)
-
 
 
 if __name__ == '__main__':
