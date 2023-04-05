@@ -52,7 +52,7 @@ for musician in all_musicians:
         mlistname = musician[0]
         mlist = list()
     try:
-        mlist.append(email.utils.parseaddr(musician[1])[1])
+        mlist.append(musician[1])
     except KeyError:
         print(f'Failed to parse ${musician[1]}')
         pass
