@@ -2,6 +2,8 @@
 
 
 import argparse
+import glob
+import os.path
 import sys
 import datetime
 from collections import defaultdict
@@ -65,6 +67,10 @@ def main():
     )
 
     args = parse_args()
+    if not args.files:
+        files = glob.glob('/var/log/mail.log*')
+        files.sort(key=os.path.getmtime)
+        args.files = files
     for name in args.files:
         if name.endswith('.gz'):
             f = gzip.open(name, 'rt')
