@@ -107,11 +107,9 @@ def get_rows(sheetservice, sheetdate, sheetid):
     rows = []
     songs = get_and_retry_on_rate_limit(sheetservice, sheetid, 'C3:L')
     for i, s in enumerate(songs):
-        # drop blank lines or lines with nothing in the first column (song)
-        if not s or not s[0]:
-            continue
-        # 'Tune...' is our ending sentinel.  Maybe a bit fragile.
-        if 'Tune to recorded tuning' in s:
+
+        # make sentinel "no title, artist, or vocalist"
+        if not s or (len(s) >= 2 and not s[0] and not s[1] and not s[2]):
             break
 
         s = stripws(s)
@@ -173,7 +171,11 @@ def main():
         output = args.start is None
         for idrow in date_and_ids:
             sheetdate, sheetid = idrow[0], idrow[1]
-            if sheetdate == args.start:
+            sheetmonth, sheetday, sheetyear = map(int, sheetdate.split('/'))
+            startmonth, startday, startyear = map(int, args.start.split('/'))
+            if (sheetyear >= startyear and
+                sheetmonth >= startmonth and
+                sheetday >= startday):
                 output = True
             if output:
                 rows += get_rows(sheetservice, sheetdate, sheetid)
