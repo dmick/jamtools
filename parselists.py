@@ -41,8 +41,8 @@ def main():
         except FileNotFoundError as e:
             pass
 
-    with open(f'all_musicians.{venue}.csv', 'w') as f:
-        f.write(musicians.text)
+        with open(f'all_musicians.{venue}.csv', 'w') as f:
+            f.write(musicians.text)
 
     all_musicians = csv.reader(musicians.iter_lines(decode_unicode=True))
 
@@ -52,13 +52,16 @@ def main():
 
     for musician in all_musicians:
         if args.debug:
-            print(mlistname, musician)
+            print('>>>', mlistname, musician)
         if len(musician) < 2:
             continue
         if len(musician[0]):
             if mlistname:
-                with open(f'{mlistname}.{venue}.txt', 'w') as out_file:
-                    print('\n'.join(mlist), file=out_file)
+                if args.debug:
+                    print(f'\n{mlistname}:\n', '\n'.join(mlist), sep='')
+                else:
+                    with open(f'{mlistname}.{venue}.txt', 'w') as out_file:
+                        print('\n'.join(mlist), file=out_file)
             mlistname = musician[0]
             mlist = list()
         try:
@@ -67,8 +70,11 @@ def main():
             print(f'Failed to parse ${musician[1]}')
             pass
 
-    with open(f'{mlistname}.{venue}.txt', 'w') as out_file:
-        print('\n'.join(mlist), file=out_file)
+    if args.debug:
+        print(f'\n{mlistname}:\n', '\n'.join(mlist), sep='')
+    else:
+        with open(f'{mlistname}.{venue}.txt', 'w') as out_file:
+            print('\n'.join(mlist), file=out_file)
 
 if __name__ == "__main__":
     sys.exit(main())
