@@ -21,12 +21,13 @@ def main():
 
     args = parse_args()
 
-    musicians = requests.get(VENUE_TO_CSVURL[args.venue])
+    venue = args.venue
+    musicians = requests.get(VENUE_TO_CSVURL[venue])
 
     # don't do contents comparison in debug mode
     if not args.debug:
         try:
-            with open('all_musicians.csv', 'rb') as f:
+            with open(f'all_musicians.{venue}.csv', 'rb') as f:
                 h = hashlib.sha256()
                 h.update(f.read())
                 old_checksum = h.digest()
@@ -40,7 +41,7 @@ def main():
         except FileNotFoundError as e:
             pass
 
-    with open('all_musicians.csv', 'w') as f:
+    with open(f'all_musicians.{venue}.csv', 'w') as f:
         f.write(musicians.text)
 
     all_musicians = csv.reader(musicians.iter_lines(decode_unicode=True))
@@ -56,7 +57,7 @@ def main():
             continue
         if len(musician[0]):
             if mlistname:
-                with open(mlistname + '.txt', 'w') as out_file:
+                with open(f'{mlistname}.{venue}.txt', 'w') as out_file:
                     print('\n'.join(mlist), file=out_file)
             mlistname = musician[0]
             mlist = list()
@@ -66,7 +67,7 @@ def main():
             print(f'Failed to parse ${musician[1]}')
             pass
 
-    with open(mlistname + '.txt', 'w') as out_file:
+    with open(f'{mlistname}.{venue}.txt', 'w') as out_file:
         print('\n'.join(mlist), file=out_file)
 
 if __name__ == "__main__":
