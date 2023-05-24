@@ -1,22 +1,30 @@
 #!/usr/bin/env python3
+import argparse
 import csv
 import email
 import hashlib
 import requests
 import sys
 
+VENUE_TO_CSVURL = {
+    'lcl': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-Wh4Xd7n7wuBb0gnOpmoO2GFwTpvXEK0fcXd1dwF8GOrhV7z8vQXjGPKE5Is3UgMNeDOGSqwGmHR2/pub?gid=0&single=true&output=csv',
+    'gl': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-Wh4Xd7n7wuBb0gnOpmoO2GFwTpvXEK0fcXd1dwF8GOrhV7z8vQXjGPKE5Is3UgMNeDOGSqwGmHR2/pub?gid=1132700691&single=true&output=csv',
+}
+
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-d', '--debug', action='store_true')
+    ap.add_argument('-V', '--venue', default='lcl', choices=VENUE_TO_CSVURL.keys())
+    return ap.parse_args()
+
 def main():
 
-    if len(sys.argv) > 1 and sys.argv[1] == '-d':
-        debug = True
-    else:
-        debug = False
+    args = parse_args()
 
-    EXPORTED_CSV='https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-Wh4Xd7n7wuBb0gnOpmoO2GFwTpvXEK0fcXd1dwF8GOrhV7z8vQXjGPKE5Is3UgMNeDOGSqwGmHR2/pub?gid=0&single=true&output=csv'
-    musicians = requests.get(EXPORTED_CSV)
+    musicians = requests.get(VENUE_TO_CSVURL[args.venue])
 
     # don't do contents comparison in debug mode
-    if not debug:
+    if not args.debug:
         try:
             with open('all_musicians.csv', 'rb') as f:
                 h = hashlib.sha256()
@@ -26,11 +34,10 @@ def main():
                 h.update(musicians.content)
                 new_checksum = h.digest()
                 if old_checksum == new_checksum:
-                    if debug:
+                    if args.debug:
                         print('Musicians list unchanged, exiting') 
                     exit(1)
         except FileNotFoundError as e:
-            print('Ignoring', e)
             pass
 
     with open('all_musicians.csv', 'w') as f:
@@ -43,7 +50,7 @@ def main():
     mlist = list()
 
     for musician in all_musicians:
-        if debug:
+        if args.debug:
             print(mlistname, musician)
         if len(musician) < 2:
             continue
