@@ -170,6 +170,8 @@ def main():
 
         output = args.start is None
         for idrow in date_and_ids:
+            if len(idrow) != 2:
+                break
             sheetdate, sheetid = idrow[0], idrow[1]
             sheetmonth, sheetday, sheetyear = map(int, sheetdate.split('/'))
             startmonth, startday, startyear = map(int, args.start.split('/'))
