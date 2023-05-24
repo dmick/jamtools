@@ -175,9 +175,9 @@ def main():
             sheetdate, sheetid = idrow[0], idrow[1]
             sheetmonth, sheetday, sheetyear = map(int, sheetdate.split('/'))
             startmonth, startday, startyear = map(int, args.start.split('/'))
-            if (sheetyear >= startyear and
-                sheetmonth >= startmonth and
-                sheetday >= startday):
+            sheetdate_int = int(f'{sheetyear}{sheetmonth:02d}{sheetday:02d}')
+            startdate_int = int(f'{startyear}{startmonth:02d}{startday:02d}')
+            if sheetdate_int > startdate_int:
                 output = True
             if output:
                 rows += get_rows(sheetservice, sheetdate, sheetid)
