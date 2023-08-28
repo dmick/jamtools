@@ -112,6 +112,10 @@ def get_rows(sheetservice, sheetdate, sheetid):
         if not s or (len(s) >= 2 and not s[0] and not s[1] and not s[2]):
             break
 
+        # ..or Tune to recorded tuning
+        if s and s[0].startswith('Tune to'):
+            break
+
         s = stripws(s)
         values = [date_to_int(sheetdate), i+1]
         for colnum in colnums:
