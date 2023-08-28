@@ -11,6 +11,7 @@ import gzip
 import pprint
 import re
 import json
+import mailbox
 
 def getfield(parts, name, stripchars='<>'):
     try:
@@ -27,6 +28,7 @@ def parse_args():
     ap.add_argument('-o', '--orig-to', help='orig_to address to find')
     ap.add_argument('-T', '--truncate', action='store_true', help='Truncate "to" list')
     ap.add_argument('-j', '--json', action='store_true', help='json output')
+    ap.add_argument('-m', '--msgid', action='store_true', help='parse host Sent box for msgids, show from/to/subject/date')
     ap.add_argument('files', nargs='*')
     return ap.parse_args()
 
@@ -57,6 +59,14 @@ def output(msg, args):
             print('...')
         else:
             print()
+
+def search_mbox(path, msgids):
+    msgs = list()
+    mbox = mailbox.mbox(path, create=False)
+    for m in mbox.items():
+        if m[1]['message-id'].strip('<>') in msgids:
+            msgs.append(m[1])
+    return msgs
         
 
 def main():
@@ -115,6 +125,7 @@ def main():
 
     truncate = False
 
+    msgids = list()
     for qid, msg in sorted(msgs.items(), key=lambda kv: kv[1]['dt']):
         if args.to:
             if not any([re.search(args.to, to) for to in msg['to']]):
@@ -122,7 +133,24 @@ def main():
         if args.orig_to:
             if not msg['orig_to'] or not re.search(args.orig_to, msg['orig_to']):
                 continue
-        output(msg, args)
+        else:
+            if args.msgid:
+                msgids.append(msg['msgid'])
+            else:
+                output(msg, args)
+
+    if args.msgid:
+        for sentmsg in search_mbox('/home/host/mail/Sent', msgids):
+            print(f'''
+From: {sentmsg.get('from')}
+To: {sentmsg.get('to')}
+Cc: {sentmsg.get('cc')}
+Bcc: {sentmsg.get('bcc')}
+Subject: {sentmsg.get('subject')}
+Date: {sentmsg.get('date')}
+Message-Id: {sentmsg.get('message-id')}'''
+            )
+
 
 if __name__ == "__main__":
     sys.exit(main())
