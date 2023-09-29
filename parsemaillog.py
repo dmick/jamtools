@@ -134,13 +134,12 @@ def main():
             if not any([re.search(args.to, to) for to in msg['to']]):
                 continue
         if args.orig_to:
-            if not msg['orig_to'] or not re.search(args.orig_to, msg['orig_to']):
+            if 'orig_to' not in msg or not re.search(args.orig_to, msg['orig_to']):
                 continue
+        if args.msgid:
+            msgids.append(msg['msgid'])
         else:
-            if args.msgid:
-                msgids.append(msg['msgid'])
-            else:
-                output(msg, args)
+            output(msg, args)
 
     if args.msgid:
         for sentmsg in search_mbox('/home/host/mail/Sent', msgids):
