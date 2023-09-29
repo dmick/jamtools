@@ -55,6 +55,7 @@ def output(msg, args):
             to = msg['to']
 
         print(f' to {", ".join(to)}', end='')
+        print(f' status {msg["status"]}', end='')
         if args.truncate:
             print('...')
         else:
@@ -103,11 +104,13 @@ def main():
             messageid = getfield(parts, 'message-id')
             fr = getfield(parts, 'from')
             orig_to = getfield(parts, 'orig_to')
+            status = getfield(parts, 'status')
 
             if to or messageid or fr or orig_to:
                 qid = parts.pop(0).rstrip(':')
                 md = msgs[qid]
                 md['dt'] = dtval
+                md['status'] = status
 
             if to:
                 md['to'].append(to)
