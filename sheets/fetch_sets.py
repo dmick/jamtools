@@ -141,7 +141,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--id', help='Google spreadsheet ID to read and csv-ize')
     parser.add_argument('-d', '--date', help='Date corresponding to ID')
-    parser.add_argument('-s', '--start', help='Date to start from "all sheets" list')
+    parser.add_argument('-s', '--start', help='Date to start from "all sheets" list', default='1/1/2000')
     return parser.parse_args()
 
 def main():
