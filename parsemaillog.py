@@ -88,6 +88,9 @@ def main():
         else:
             f = open(name, 'r')
 
+        mtime = os.fstat(f.fileno()).st_mtime
+        dt_mtime = datetime.datetime.fromtimestamp(mtime)
+        fileyear = dt_mtime.year
         for line in f:
             parts = line.split()
             parts = [p.strip(' ,') for p in parts]
@@ -95,7 +98,7 @@ def main():
             dt_parts = parts[0:3]
             parts = parts[3:]
             dtval=datetime.datetime.strptime(
-                ' '.join(dt_parts) + ' 2023','%b %d %H:%M:%S %Y')
+                ' '.join(dt_parts) + ' ' + str(fileyear),'%b %d %H:%M:%S %Y')
 
             # skip hostname, logger name/pid
             parts = parts[2:]
