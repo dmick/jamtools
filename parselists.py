@@ -64,6 +64,9 @@ def main():
                         print('\n'.join(mlist), file=out_file)
             mlistname = musician[0]
             mlist = list()
+        if 'skip' in musician[2].lower():
+            print(f'{mlistname} {musician[1]}: {musician[2]}')
+            continue
         try:
             mlist.append(musician[1])
         except KeyError:
