@@ -64,7 +64,7 @@ def main():
                         print('\n'.join(mlist), file=out_file)
             mlistname = musician[0]
             mlist = list()
-        if 'skip' in musician[2].lower():
+        if len(musician) > 2 and 'skip' in musician[2].lower():
             print(f'{mlistname} {musician[1]}: {musician[2]}')
             continue
         try:
