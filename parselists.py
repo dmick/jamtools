@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import csv
+import difflib
 import email
 import hashlib
 import requests
@@ -23,26 +24,32 @@ def main():
 
     venue = args.venue
     musicians = requests.get(VENUE_TO_CSVURL[venue])
+    oldmusicians = ''
 
     # don't do contents comparison in debug mode
     if not args.debug:
         try:
             with open(f'all_musicians.{venue}.csv', 'rb') as f:
-                h = hashlib.sha256()
-                h.update(f.read())
-                old_checksum = h.digest()
-                h = hashlib.sha256()
-                h.update(musicians.content)
-                new_checksum = h.digest()
-                if old_checksum == new_checksum:
-                    if args.debug:
-                        print('Musicians list unchanged, exiting') 
-                    exit(1)
+                oldmusicians = f.read()
+            h = hashlib.sha256()
+            h.update(oldmusicians)
+            old_checksum = h.digest()
+            h = hashlib.sha256()
+            h.update(musicians.content)
+            new_checksum = h.digest()
+            if old_checksum == new_checksum:
+                return(1)
         except FileNotFoundError as e:
             pass
 
-        with open(f'all_musicians.{venue}.csv', 'w') as f:
-            f.write(musicians.text)
+    with open(f'all_musicians.{venue}.csv', 'w') as f:
+        f.write(musicians.text)
+
+    oldlines = oldmusicians.decode().split('\r\n')
+    newlines = musicians.text.split('\r\n')
+    difflines = list(difflib.unified_diff(oldlines, newlines))
+    print('\n'.join(difflines[4:]))
+    print()
 
     all_musicians = csv.reader(musicians.iter_lines(decode_unicode=True))
 
