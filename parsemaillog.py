@@ -29,6 +29,7 @@ def parse_args():
     ap.add_argument('-T', '--truncate', action='store_true', help='Truncate "to" list')
     ap.add_argument('-j', '--json', action='store_true', help='json output')
     ap.add_argument('-m', '--msgid', action='store_true', help='parse host Sent box for msgids, show from/to/subject/date')
+    ap.add_argument('-O', '--other', help='Other required strings for the log line')
     ap.add_argument('files', nargs='*')
     return ap.parse_args()
 
@@ -112,6 +113,7 @@ def main():
             if to or messageid or fr or orig_to:
                 qid = parts.pop(0).rstrip(':')
                 md = msgs[qid]
+                md['origline'] = line.strip()
                 md['dt'] = dtval
                 md['status'] = status
 
@@ -139,6 +141,8 @@ def main():
         if args.orig_to:
             if 'orig_to' not in msg or not re.search(args.orig_to, msg['orig_to']):
                 continue
+        if args.other and args.other not in msg['origline']:
+            continue
         if args.msgid:
             msgids.append(msg['msgid'])
         else:
