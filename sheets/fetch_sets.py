@@ -15,7 +15,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--id', help='Google spreadsheet ID to read and csv-ize')
     parser.add_argument('-d', '--date', help='Date corresponding to ID')
-    parser.add_argument('-s', '--start', help='Date to start from "all sheets" list')
+    parser.add_argument('-s', '--start', help='Output info from date greater than given date')
+    parser.add_argument('-l', '--list', action='store_true', help='output only title/artist')
     return parser.parse_args()
 
 def main():
@@ -59,7 +60,11 @@ def main():
             if output:
                 rows += set_utils.get_rows(sheetservice, sheetdate, sheetid)
 
-    cw = csv.DictWriter(sys.stdout, set_utils.cleanfields(set_utils.ALLFIELDS))
+    if args.list:
+        fields = ['song', 'artist']
+    else:
+        fields = set_utils.cleanfields(set_utils.ALLFIELDS)
+    cw = csv.DictWriter(sys.stdout, fields, extrasaction='ignore')
     cw.writeheader()
     cw.writerows(rows)
 
