@@ -26,6 +26,14 @@ def main():
     musicians = requests.get(VENUE_TO_CSVURL[venue])
     oldmusicians = ''
 
+    length = len([l for l in musicians.iter_lines(decode_unicode=True)])
+
+    if (length < 10) or (length > 1000):
+        print(f'Apparently bad fetch musicians list: len {length}')
+        exit(1)
+
+    all_musicians = csv.reader(musicians.iter_lines(decode_unicode=True))
+
     # don't do contents comparison in debug mode
     if not args.debug:
         try:
