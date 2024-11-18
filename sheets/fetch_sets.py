@@ -19,6 +19,11 @@ def parse_args():
     parser.add_argument('-l', '--list', action='store_true', help='output only title/artist')
     return parser.parse_args()
 
+def date_to_int(d):
+    month, day, year = map(int, d.split('/'))
+    date_int = int(f'{year}{month:02d}{day:02d}')
+    return date_int
+
 def main():
     """Shows basic usage of the Sheets API.
     Prints values from a sample spreadsheet.
@@ -28,12 +33,7 @@ def main():
     sheetservice = google_utils.get_sheetservice()
     rows = []
 
-    id_and_date_args = int(args.id is not None) + int(args.date is not None)
-    if (id_and_date_args == 1):
-        print("Must supply both or neither of --date and --id", file=sys.stderr)
-        return 1
-
-    if (id_and_date_args and args.start):
+    if ((args.id or args.date) and args.start):
         print("--id/--date and --start are mutually exclusive", file=sys.stderr)
         return 1
 
@@ -43,20 +43,30 @@ def main():
         # get the cross-reference of dates/setlist sheets
         date_and_ids = set_utils.get_and_retry_on_rate_limit(sheetservice, ALL_SETLISTS_SHEETID, 'A:B')
 
-        output = args.start is None
+        if args.start:
+            startdate_int = date_to_int(args.start)
+        if args.date:
+            date_int = date_to_int(args.date)
+
         for idrow in date_and_ids:
             if len(idrow) != 2:
                 break
+            # if args.start, don't output until date is after args.start
+            # if args.date, don't output unless date == args.date
+            # if we're here, we didn't have both args.id and args.date
+
+            output = False
             sheetdate, sheetid = idrow[0], idrow[1]
-            sheetmonth, sheetday, sheetyear = map(int, sheetdate.split('/'))
+            sheetdate_int = date_to_int(sheetdate)
             if args.start:
-                startmonth, startday, startyear = map(int, args.start.split('/'))
+                if sheetdate_int > startdate_int:
+                    output = True
+            elif args.date:
+                if sheetdate_int == date_int:
+                    output = True
             else:
-                startmonth, startday, startyear = 1,1,2000
-            sheetdate_int = int(f'{sheetyear}{sheetmonth:02d}{sheetday:02d}')
-            startdate_int = int(f'{startyear}{startmonth:02d}{startday:02d}')
-            if sheetdate_int > startdate_int:
                 output = True
+
             if output:
                 rows += set_utils.get_rows(sheetservice, sheetdate, sheetid)
 
