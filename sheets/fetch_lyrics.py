@@ -6,6 +6,7 @@ import requests
 import sys
 import urllib.parse
 
+SEPARATOR = f'\n{"=" * 30}\n'
 
 re_subs = [
     # remove any comment
@@ -23,10 +24,35 @@ re_subs = [
     (r'RHCP', 'Red Hot Chili Peppers'),
 ]
 
+
 def cleanup(s):
     for search, replace in re_subs:
         s = re.sub(search, replace, s)
     return s
+
+
+def change_fetch_and_retry(song, artist):
+    # various heuristics to try to cope with special situations
+    #
+    # 1) try prepending 'The ' to the artist name
+    new_artist = 'The ' + artist
+    print(f'Looking for {song} {new_artist}', file=sys.stderr)
+    if (lyrics := fetch_lyrics(song, new_artist)):
+        return lyrics
+
+    # 2) look for '/' in title, try two fetches for two titles
+    found_all = True
+    if '/' in song:
+        combined_lyrics = list()
+        songs = song.split('/')
+        for s in songs:
+            if (lyrics := fetch_lyrics(s, artist)) is None:
+                found_all = False
+            else:
+                combined_lyrics.append(lyrics)
+    if found_all:
+        return SEPARATOR.join(combined_lyrics)
+
 
 def fetch_lyrics(song, artist):
     quoted_artist = urllib.parse.quote_plus(artist)
@@ -42,24 +68,26 @@ def fetch_lyrics(song, artist):
     return j['plainLyrics']
 
 def main():
-    reader = csv.DictReader(open(sys.argv[1], newline=''))
+    if len(sys.argv) > 1:
+        infile = open(sys.argv[1], newline='')
+    else:
+        infile = sys.stdin
+    print(f'{infile=}', file=sys.stderr)
+    reader = csv.DictReader(infile)
     for row in reader:
         artist = cleanup(row['artist'])
         song = cleanup(row['song'])
         print(f'Looking for {song} {artist}', file=sys.stderr)
         lyrics = fetch_lyrics(song, artist)
         if lyrics is None:
-            new_artist = 'The ' + artist
-            print(f'Looking for {song} {new_artist}', file=sys.stderr)
-            lyrics = fetch_lyrics(song, new_artist)
+            lyrics = change_fetch_and_retry(song, artist)
         if lyrics is None:
             print()
             print(f'*** {song} - {artist}: Lyrics not found ***')
             print()
             continue
-        print()
-        print('=' * 80)
-        print()
+
+        print(SEPARATOR)
         print(f'{song} - {artist}')
         print()
         print(lyrics)
