@@ -1,4 +1,4 @@
-#!v/bin/python3
+#!/home/dmick/src/sheets/v/bin/python3
 
 import argparse
 import csv
@@ -14,13 +14,19 @@ ALL_SETLISTS_SHEETID = '1hxuvHuYAYcxQlOE4KCaeoiSrgZC95OOk3B2Ciu6LAiM'
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--id', help='Google spreadsheet ID to read and csv-ize')
-    parser.add_argument('-d', '--date', help='Date corresponding to ID')
+    parser.add_argument('-d', '--date', help='Date of set to fetch (MM/DD/YYYY or YYYY-MM-DD)')
     parser.add_argument('-s', '--start', help='Output info from date greater than given date')
-    parser.add_argument('-l', '--list', action='store_true', help='output only title/artist')
+    parser.add_argument('-l', '--list', action='store_true', help='output only title,artist')
+    parser.add_argument('-L', '--list2', action='store_true', help='output only artist - title')
     return parser.parse_args()
 
 def date_to_int(d):
-    month, day, year = map(int, d.split('/'))
+    if '-' in d:
+        # YYYY-MM-DD, like HTML input type=date
+        year, month, day = map(int, d.split('-'))
+    else:
+        # MM/DD/YYYY
+        month, day, year = map(int, d.split('/'))
     date_int = int(f'{year}{month:02d}{day:02d}')
     return date_int
 
@@ -70,6 +76,15 @@ def main():
             if output:
                 rows += set_utils.get_rows(sheetservice, sheetdate, sheetid)
 
+    if args.date and len(rows) == 0:
+        print(f'No set found for {args.date}', file=sys.stderr)
+        return 1
+
+    if args.list2:
+        for r in rows:
+            print(f'{r["artist"]} - {r["song"]}')
+        return 0
+
     if args.list:
         fields = ['song', 'artist']
     else:
@@ -77,7 +92,8 @@ def main():
     cw = csv.DictWriter(sys.stdout, fields, extrasaction='ignore')
     cw.writeheader()
     cw.writerows(rows)
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
