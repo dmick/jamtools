@@ -6,7 +6,7 @@ from googleapiclient.errors import HttpError
 # svcacct
 from google.oauth2 import service_account
 
-SERVICE_ACCOUNT_FILE = 'serviceaccount.key'
+SERVICE_ACCOUNT_FILE = '/home/dmick/src/sheets/serviceaccount.key'
 # If modifying these scopes in AppFlow, delete token.json.
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
