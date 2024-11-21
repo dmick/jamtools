@@ -6,18 +6,20 @@ import subprocess
 from subprocess import PIPE
 from urllib.parse import parse_qs
 
-TMPFILE='/tmp/setlist.tmp'
-LYRCMD='/home/dmick/src/sheets/fetch_lyrics.py %s' 
-LISTCMD='/home/dmick/src/sheets/fetch_sets.py -l -d %s'
+LYRCMD = '/home/dmick/src/sheets/fetch_lyrics.py'
+LISTCMD = '/home/dmick/src/sheets/fetch_sets.py -l -d %s'
 
-def run_command(args):
-    # print(f'{args=}', file=open('/tmp/tmp', 'w'))
+
+def run_command(args, data=None):
+    # print(f'{args=} {data=}', file=open('/tmp/tmp', 'w'))
     if isinstance(args, str):
         args = args.split(' ')
-    p = subprocess.Popen(args, stdout=PIPE, stderr=PIPE)
-    out, err = p.communicate()
+
+    p = subprocess.Popen(args, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    out, err = p.communicate(data.encode())
     # print(f'{out=} {err=}', file=open('/tmp/output', 'w'))
     return p.returncode, out, err
+
 
 def print_form():
     print(f'''Content-Type: text/html
@@ -43,10 +45,10 @@ def print_form():
 </html>''')
 
 
-HEADER='<html><body>'
-FOOTER='</body></html>'
+HEADER = '<html><body>'
+FOOTER = '</body></html>'
 
-SCROLL_SCRIPT='''
+SCROLL_SCRIPT = '''
 <body onkeydown="scrollfunc(event)">
 <script>
 function scrollfunc(e) {
@@ -61,7 +63,7 @@ function scrollfunc(e) {
 }
 </script>'''
 
-CSS='''
+CSS = '''
 <style>
 html {
         scroll-behavior: smooth;
@@ -82,24 +84,22 @@ p {
 
 def do_fetch(date, setlist=None, html=False):
     if (not date) and setlist:
-        with open(TMPFILE, 'w') as setlistfile:
-            # handle firstline has 'artist' but not 'song,artist'
-            # or firstline has no 'artist' (assume no fields line at all)
-            firstline = setlist.split('\n')[0]
-            if (('artist' in firstline) and (firstline != 'song,artist')):
-                setlist = 'song,artist\n' + '\n'.join(setlist.split('\n')[1:])
-            elif ('artist' not in firstline):
-                setlist = 'song,artist\n' + setlist 
-            setlistfile.write(setlist)
+        # handle firstline has 'artist' but not 'song,artist'
+        # or firstline has no 'artist' (assume no fields line at all)
+        firstline = setlist.split('\n')[0]
+        if (('artist' in firstline) and (firstline != 'song,artist')):
+            setlist = 'song,artist\n' + '\n'.join(setlist.split('\n')[1:])
+        elif ('artist' not in firstline):
+            setlist = 'song,artist\n' + setlist
+        setlist_data = setlist
     else:
         retcode, out, err = run_command(LISTCMD % date)
         if retcode:
             print('Content-Type: text/plain\n')
             print(f'ERROR:{err.decode()}')
             return
-        with open(TMPFILE, 'w') as setlistfile:
-            setlistfile.write(out.decode())
-    retcode, out, err = run_command(LYRCMD % TMPFILE)
+        setlist_data = out.decode()
+    retcode, out, err = run_command(LYRCMD, data=setlist_data)
     if retcode:
         print('Content-Type: text/plain\n')
         print(f'ERROR:{err.decode()}')
@@ -138,6 +138,7 @@ def main():
         return 0
 
     return do_fetch(date, setlist, html)
+
 
 if __name__ == "__main__":
     sys.exit(main())
