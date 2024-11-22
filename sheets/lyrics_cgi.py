@@ -25,24 +25,37 @@ def run_command(args, data=None):
 
 
 def print_form():
+    # define this to avoid having to use {{ everywhere in the f-string 
+    style = '''
+<style>
+  body, form, input, textarea, button {
+    font-size: 18px; 
+  }
+  #setlistlabel, #setlist {
+    display: block;
+  } 
+    
+</style>
+'''
+ 
     print(f'''Content-Type: text/html
-
 <html>
 <head>
-<style>
-  label,button {{display: block}}
-</style>
+{style}
 </head>
 <body>
 <form method=GET action="{os.environ['SCRIPT_NAME']}">
-<label for="date">Date (Use Last Call setlist from this date)</label>
-<input type="date" id="date" name="date">
-<label for="setlist">Or enter a setlist here (lines of song,artist) </label>
-<textarea id="setlist" name="setlist" rows="25" cols="40">One,U2\nTwo Hearts Beat As One,U2</textarea>
-<label for="html">Output HTML</label>
-<input type=checkbox id="html" name="html" value="true">
-<button type="reset">Reset form</button>
-<button type="submit">Go</button>
+
+  <label id="datelabel" for="date">Date (Use Last Call setlist from this date)</label>
+  <input type="date" id="date" name="date">
+  <button type="button" onclick="document.getElementById('date').value=0">Clear date</button>
+  <label for="setlist" id="setlistlabel">Or enter a setlist here (lines of song,artist, Date must be cleared):</label>
+  <textarea id="setlist" name="setlist" rows="25" cols="40">One,U2\nTwo Hearts Beat As One,U2</textarea>
+
+  <input type=checkbox id="html" name="html" value="true">
+  <label for="html" id="htmllabel">Output HTML</label>
+  <button type="submit" id="go">Go</button>
+
 </form>
 </body>
 </html>''')
