@@ -8,24 +8,44 @@ import urllib.parse
 
 SEPARATOR = f'\n{"=" * 30}\n'
 
-re_subs = [
+re_subs_artist = [
     # remove any comment
     (r'\(.*\)', ''),
+    # common abbreviations/misspellings
     (r'&', 'and'),
-    # common abbreviations
     (r'Zep$', 'Zeppelin'),
     (r'GnR', 'Guns n Roses'),
     (r'Elvis$', 'Elvis Presley'),
     (r"in'", 'ing'),
     (r'Bros.', 'Brothers'),
-    (r'(\S+), The', r'The \1'),
+    (r'(.*), The', r'The \1'),
     (r'Morrissette', 'Morissette'),
     (r'NIN', 'Nine Inch Nails'),
+    (r'AIC', 'Alice In Chains'),
     (r'RHCP', 'Red Hot Chili Peppers'),
+    (r'Paparoach', 'Papa Roach'),
+    (r'Bad Co.', 'Bad Company'),
+    (r'Lovecats', 'The Lovecats'),
+]
+
+re_subs_song = [
+    # remove any comment
+    (r'\(.*\)', ''),
+    # common abbreviations/misspellings
+    (r'&', 'and'),
+    (r"in'", 'ing'),
+    (r'Lovecats', 'The Lovecats'),
 ]
 
 
-def cleanup(s):
+def cleanup(which, s):
+    if which == 'song':
+        re_subs = re_subs_song
+    elif which == 'artist':
+        re_subs = re_subs_artist
+    else:
+        return s
+
     for search, replace in re_subs:
         s = re.sub(search, replace, s)
     return s
@@ -75,8 +95,8 @@ def main():
     print(f'{infile=}', file=sys.stderr)
     reader = csv.DictReader(infile)
     for row in reader:
-        artist = cleanup(row['artist'])
-        song = cleanup(row['song'])
+        artist = cleanup('artist', row['artist'])
+        song = cleanup('song', row['song'])
         print(f'Looking for {song} {artist}', file=sys.stderr)
         lyrics = fetch_lyrics(song, artist)
         if lyrics is None:
