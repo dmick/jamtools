@@ -61,17 +61,16 @@ def change_fetch_and_retry(song, artist):
         return lyrics
 
     # 2) look for '/' in title, try two fetches for two titles
-    found_all = True
+    found = 0
     if '/' in song:
         combined_lyrics = list()
         songs = song.split('/')
         for s in songs:
-            if (lyrics := fetch_lyrics(s, artist)) is None:
-                found_all = False
-            else:
+            if (lyrics := fetch_lyrics(s, artist)):
+                found += 1
                 combined_lyrics.append(lyrics)
-    if found_all:
-        return SEPARATOR.join(combined_lyrics)
+        if found and found == len(songs):
+            return SEPARATOR.join(combined_lyrics)
 
 
 def fetch_lyrics(song, artist):
