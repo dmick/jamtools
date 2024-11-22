@@ -16,7 +16,10 @@ def run_command(args, data=None):
         args = args.split(' ')
 
     p = subprocess.Popen(args, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    out, err = p.communicate(data.encode())
+    if data:
+        out, err = p.communicate(data.encode())
+    else:
+        out, err = p.communicate()
     # print(f'{out=} {err=}', file=open('/tmp/output', 'w'))
     return p.returncode, out, err
 
