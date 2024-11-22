@@ -91,7 +91,6 @@ def main():
         infile = open(sys.argv[1], newline='')
     else:
         infile = sys.stdin
-    print(f'{infile=}', file=sys.stderr)
     reader = csv.DictReader(infile)
     for row in reader:
         artist = cleanup('artist', row['artist'])
