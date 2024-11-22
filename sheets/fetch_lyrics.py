@@ -73,18 +73,27 @@ def change_fetch_and_retry(song, artist):
             return SEPARATOR.join(combined_lyrics)
 
 
-def fetch_lyrics(song, artist):
-    quoted_artist = urllib.parse.quote_plus(artist)
-    quoted_song = urllib.parse.quote_plus(song)
-    url = f'https://lrclib.net/api/get?artist_name={quoted_artist}&track_name={quoted_song}'
+
+
+def fetch_api_path(path):
+    url = f'https://lrclib.net/api/{path}'
     resp = requests.get(url)
     if resp.status_code == 404:
         return None
     j = resp.json()
     if resp.status_code == 400:
         print(f'{j["name"]}: {j["message"]}', file=sys.stderr)
-        return ''
-    return j['plainLyrics']
+        return None
+    return resp
+
+
+def fetch_lyrics(song, artist):
+    quoted_artist = urllib.parse.quote_plus(artist)
+    quoted_song = urllib.parse.quote_plus(song)
+    resp = fetch_api_path(f'get?artist_name={quoted_artist}&track_name={quoted_song}')
+
+    if resp:
+        return resp.json()['plainLyrics']
 
 def main():
     if len(sys.argv) > 1:
