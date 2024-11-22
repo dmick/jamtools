@@ -72,7 +72,34 @@ def change_fetch_and_retry(song, artist):
         if found and found == len(songs):
             return SEPARATOR.join(combined_lyrics)
 
+    # 3) look for 'and' in artist, truncate before (for songs like
+    # 'artist and guest artist' (rather than bands like Sam and Dave))
+    if 'and' in artist:
+        new_artist = re.sub(r'(.*) and.*', r'\1', artist)
+        if lyrics := fetch_lyrics(song, new_artist):
+            return lyrics
 
+    # 4) look for '/' in both title and artist, try splitting both
+    found = 0
+    if '/' in song and '/' in artist:
+        combined_lyrics = list()
+        songs = song.split('/')
+        artists = artist.split('/')
+        if len(songs) == len(artists):
+            for s, a in zip(songs, artists):
+                if (lyrics := fetch_lyrics(s, a)):
+                    found += 1
+                    combined_lyrics.append(lyrics)
+            if found and found == len(songs):
+                return SEPARATOR.join(combined_lyrics)
+
+    # 5) long shot: try api/search for the song string, and look for a
+    # matching artist in the returned JSON, like for "(The Angels Wanna
+    # Wear My) Red Shoes", which will end up having been cleaned up to
+    # "Red Shoes"
+    lyrics = search_song(song, artist)
+
+    return lyrics
 
 
 def fetch_api_path(path):
@@ -94,6 +121,18 @@ def fetch_lyrics(song, artist):
 
     if resp:
         return resp.json()['plainLyrics']
+
+
+def search_song(song, artist):
+    quoted_search = urllib.parse.quote_plus(song)
+    resp = fetch_api_path(f'search?track_name={quoted_search}')
+    if resp:
+        matches = resp.json()
+        for m in matches:
+            if m['artistName'] == artist:
+                return m['plainLyrics']
+    return None
+
 
 def main():
     if len(sys.argv) > 1:
