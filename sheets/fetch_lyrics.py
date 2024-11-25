@@ -16,16 +16,20 @@ re_subs_artist = [
     (r'Zep$', 'Zeppelin'),
     (r'GnR', 'Guns n Roses'),
     (r'Elvis$', 'Elvis Presley'),
-    (r"in'", 'ing'),
     (r'Bros.', 'Brothers'),
     (r'(.*), The', r'The \1'),
     (r'Morrissette', 'Morissette'),
     (r'NIN', 'Nine Inch Nails'),
     (r'AIC', 'Alice In Chains'),
     (r'RHCP', 'Red Hot Chili Peppers'),
+    (r'STP', 'Stone Temple Pilots'),
     (r'Paparoach', 'Papa Roach'),
     (r'Bad Co.', 'Bad Company'),
-    (r'Lovecats', 'The Lovecats'),
+    (r'Wonderstuff', 'The Wonder Stuff'),
+    (r'Three Eleven', '311'),
+    (r'Jesus and the Mary Chain', 'The Jesus and Mary Chain'),
+    (r'CandC Dance', 'C+C Music'),
+    (r'Three Doors Down', '3 Doors Down'),
 ]
 
 re_subs_song = [
@@ -33,8 +37,16 @@ re_subs_song = [
     (r'\(.*\)', ''),
     # common abbreviations/misspellings
     (r'&', 'and'),
-    (r"in'", 'ing'),
-    (r'Lovecats', 'The Lovecats'),
+    # (r"([^Aa])in'", '\1ing'), questionable, should only be for a retry
+    ('Lovecats', 'The Lovecats'),
+    ('Mean Streets', 'Mean Street'),
+    ('DOA', 'D.O.A.'),
+    ('H2H', 'Highway To Hell'),
+    ('Pushing Forward Back', 'Pushin Forward Back'),
+    ('Stickshifts and Safety Belts', 'Stickshifts and Safetybelts'),
+    ('Arrested for Driving', 'Arrested for Driving While Blind'),
+    ('Can\'t Stand', 'Can\'t Stand Losing You'),
+    ('Dead An Bloated', 'Dead And Bloated'),
 ]
 
 
@@ -51,16 +63,31 @@ def cleanup(which, s):
     return s
 
 
-def change_fetch_and_retry(song, artist):
+def retry(song, artist):
+    #
     # various heuristics to try to cope with special situations
     #
+    # 0) try cleanup(song) and try adding cleanup(artist)
+    song = cleanup('song', song)
+    if lyrics := fetch_lyrics(song, artist):
+        return lyrics
+
+    artist = cleanup('artist', artist)
+    if lyrics := fetch_lyrics(song, artist):
+        return lyrics
+
     # 1) try prepending 'The ' to the artist name
     new_artist = 'The ' + artist
     print(f'Looking for {song} {new_artist}', file=sys.stderr)
     if (lyrics := fetch_lyrics(song, new_artist)):
         return lyrics
 
-    # 2) look for '/' in title, try two fetches for two titles
+    # 2) try removing 'The ' from the song
+    new_song = re.sub('^The ', '', song)
+    if (lyrics := fetch_lyrics(new_song, artist)):
+        return lyrics
+
+    # 3) look for '/' in title, try two fetches for two titles
     found = 0
     if '/' in song:
         combined_lyrics = list()
@@ -72,14 +99,21 @@ def change_fetch_and_retry(song, artist):
         if found and found == len(songs):
             return SEPARATOR.join(combined_lyrics)
 
-    # 3) look for 'and' in artist, truncate before (for songs like
+    # 4) look for '/' in artist, try each artist
+    if '/' in artist:
+        artists = artist.split('/')
+        for a in artists:
+            if (lyrics := fetch_lyrics(song, a)):
+                return lyrics
+
+    # 5) look for 'and' in artist, truncate before (for songs like
     # 'artist and guest artist' (rather than bands like Sam and Dave))
     if 'and' in artist:
         new_artist = re.sub(r'(.*) and.*', r'\1', artist)
         if lyrics := fetch_lyrics(song, new_artist):
             return lyrics
 
-    # 4) look for '/' in both title and artist, try splitting both
+    # 6) look for '/' in both title and artist, try splitting both
     found = 0
     if '/' in song and '/' in artist:
         combined_lyrics = list()
@@ -93,10 +127,11 @@ def change_fetch_and_retry(song, artist):
             if found and found == len(songs):
                 return SEPARATOR.join(combined_lyrics)
 
-    # 5) long shot: try api/search for the song string, and look for a
+    # 7) long shot: try api/search for the song string, and look for a
     # matching artist in the returned JSON, like for "(The Angels Wanna
     # Wear My) Red Shoes", which will end up having been cleaned up to
-    # "Red Shoes"
+    # "Red Shoes".  Also, when matching artist, first look for exact
+    # match, then look for 'artist' as substring of db artist.
     lyrics = search_song(song, artist)
 
     return lyrics
@@ -120,7 +155,10 @@ def fetch_lyrics(song, artist):
     resp = fetch_api_path(f'get?artist_name={quoted_artist}&track_name={quoted_song}')
 
     if resp:
-        return resp.json()['plainLyrics']
+        j = resp.json()
+        if j['instrumental']:
+            return '<Instrumental>'
+        return j['plainLyrics']
 
 
 def search_song(song, artist):
@@ -130,6 +168,9 @@ def search_song(song, artist):
         matches = resp.json()
         for m in matches:
             if m['artistName'] == artist:
+                return m['plainLyrics']
+        for m in matches:
+            if artist in m['artistName']:
                 return m['plainLyrics']
     return None
 
@@ -141,12 +182,12 @@ def main():
         infile = sys.stdin
     reader = csv.DictReader(infile)
     for row in reader:
-        artist = cleanup('artist', row['artist'])
-        song = cleanup('song', row['song'])
+        artist = row['artist']
+        song = row['song']
         print(f'Looking for {song} {artist}', file=sys.stderr)
         lyrics = fetch_lyrics(song, artist)
         if lyrics is None:
-            lyrics = change_fetch_and_retry(song, artist)
+            lyrics = retry(song, artist)
         if lyrics is None:
             print()
             print(f'*** {song} - {artist}: Lyrics not found ***')
