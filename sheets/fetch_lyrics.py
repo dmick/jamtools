@@ -150,6 +150,8 @@ def fetch_api_path(path):
 
 
 def fetch_lyrics(song, artist):
+    if not song or not artist:
+        return f'<incomplete request {song=} {artist=}>'
     quoted_artist = urllib.parse.quote_plus(artist)
     quoted_song = urllib.parse.quote_plus(song)
     resp = fetch_api_path(f'get?artist_name={quoted_artist}&track_name={quoted_song}')
