@@ -31,9 +31,6 @@ def date_to_int(d):
     return date_int
 
 def main():
-    """Shows basic usage of the Sheets API.
-    Prints values from a sample spreadsheet.
-    """
     args = parse_args()
 
     sheetservice = google_utils.get_sheetservice()
