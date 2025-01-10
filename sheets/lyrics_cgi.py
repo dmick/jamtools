@@ -1,12 +1,13 @@
 #!/usr/bin/python3
 
+import csv
+from lyrics import fetch_and_retry, SEPARATOR
 import os
 import sys
 import subprocess
 from subprocess import PIPE
 from urllib.parse import parse_qs
 
-LYRCMD = '/home/dmick/src/sheets/fetch_lyrics.py'
 LISTCMD = '/home/dmick/src/sheets/fetch_sets.py -l -d %s'
 
 
@@ -98,42 +99,56 @@ p {
 </style>'''
 
 
-def do_fetch(date, setlist=None, html=False):
-    if (not date) and setlist:
-        # handle firstline has 'artist' but not 'song,artist'
-        # or firstline has no 'artist' (assume no fields line at all)
-        firstline = setlist.split('\n')[0]
-        if (('artist' in firstline) and (firstline != 'song,artist')):
-            setlist = 'song,artist\n' + '\n'.join(setlist.split('\n')[1:])
-        elif ('artist' not in firstline):
-            setlist = 'song,artist\n' + setlist
-        setlist_data = setlist
+def format_lyrics(song, artist, lyrics, html):
+    if lyrics:
+        lyrics = f'{SEPARATOR}\n{song} - {artist}\n\n{lyrics}'
     else:
+        if html:
+            print(f'&nbsp\n*** {song} - {artist}: Lyrics not found ***\n&nbsp')
+        else:
+            print(f'\n*** {song} - {artist}: Lyrics not found ***\n')
+        return
+
+    if html:
+        for l in lyrics.split('\n'):
+            l = l.strip()
+            if not len(l):
+                l = '&nbsp'
+            print(f'<p>{l}</p>')
+    else:
+        print(f'{lyrics}')
+
+
+def do_fetch(date, setlist=None, html=False):
+    if (date):
         retcode, out, err = run_command(LISTCMD % date)
         if retcode:
             print('Content-Type: text/plain\n')
             print(f'ERROR:{err.decode()}')
             return
-        setlist_data = out.decode()
-    retcode, out, err = run_command(LYRCMD, data=setlist_data)
-    if retcode:
-        print('Content-Type: text/plain\n')
-        print(f'ERROR:{err.decode()}')
-        return 1
+        setlist = out.decode()
 
-    if out:
-        if html:
-            print('Content-Type: text/html\n')
-            print(HEADER, CSS, SCROLL_SCRIPT)
-            for l in out.decode().split('\n'):
-                l = l.strip()
-                if not len(l):
-                    l = '&nbsp'
-                print(f'<p>{l}</p>')
-            print(FOOTER)
-        else:
-            print('Content-Type: text/plain\n')
-            print(f'{out.decode()}')
+    if html:
+        print('Content-Type: text/html; charset=utf-8\n')
+        print(HEADER, CSS, SCROLL_SCRIPT)
+    else:
+        print('Content-Type: text/plain; charset=utf-8\n')
+
+    if setlist.split('\n')[0].strip() != 'song,artist':
+        setlist = 'song,artist\n' + setlist
+    setlist = [line.strip() for line in setlist.split('\n')]
+    csvreader = csv.DictReader(setlist)
+
+    for row in csvreader:
+        lyrics = fetch_and_retry(row['song'], row['artist'])
+        format_lyrics(row['song'], row['artist'], lyrics, html)
+        # get it incrementally to the client
+        sys.stdout.flush()
+
+    if html:
+        print(FOOTER)
+        sys.stdout.flush()
+
     return 0
 
 
