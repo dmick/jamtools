@@ -50,7 +50,7 @@ re_subs_song = [
 # can be "(id, <id>)" to override the normal search with api/get/<id>, or
 #  ('field', 'value') to add &field=value to the normal api get
 extra_params = [
-    ('Hard To Handle', 'Black Crowes', ('id', 15855138)),
+    (r'Hard [Tt]o Handle', 'Black Crowes', ('id', 15855138)),
 ]
 
 
@@ -73,7 +73,7 @@ def fetch_and_retry(song, artist):
 
     extra = None
     for extra_entry in extra_params:
-        if song == extra_entry[0] and artist == extra_entry[1]:
+        if re.match(extra_entry[0], song) and re.match(extra_entry[1], artist):
             extra = extra_entry[2]
 
     if lyrics := fetch_lyrics(song, artist, extra):
