@@ -46,6 +46,13 @@ re_subs_song = [
     ('Dead An Bloated', 'Dead And Bloated'),
 ]
 
+# if you need to customize the api path, map title/artist to a tuple. Tuple
+# can be "(id, <id>)" to override the normal search with api/get/<id>, or
+#  ('field', 'value') to add &field=value to the normal api get
+extra_params = [
+    ('Hard To Handle', 'Black Crowes', ('id', 15855138)),
+]
+
 
 def cleanup(which, s):
     if which == 'song':
@@ -61,7 +68,15 @@ def cleanup(which, s):
 
 
 def fetch_and_retry(song, artist):
-    if lyrics := fetch_lyrics(song, artist):
+    # first add any extra params if we know it'll help isolate the
+    # particular song we want
+
+    extra = None
+    for extra_entry in extra_params:
+        if song == extra_entry[0] and artist == extra_entry[1]:
+            extra = extra_entry[2]
+
+    if lyrics := fetch_lyrics(song, artist, extra):
         return lyrics
 
     #
@@ -149,12 +164,19 @@ def fetch_api_path(path):
     return resp
 
 
-def fetch_lyrics(song, artist):
+def fetch_lyrics(song, artist, extra=None):
     if not song or not artist:
         return f'<incomplete request {song=} {artist=}>'
     quoted_artist = urllib.parse.quote_plus(artist)
     quoted_song = urllib.parse.quote_plus(song)
-    resp = fetch_api_path(f'get?artist_name={quoted_artist}&track_name={quoted_song}')
+
+    api_path = f'get?artist_name={quoted_artist}&track_name={quoted_song}'
+    if extra:
+        if extra[0] == 'id':
+            api_path=f'get/{extra[1]}'
+        else:
+            api_path += f'&{extra[0]}={urllib.parse.quote_plus(extra[1])}'
+    resp = fetch_api_path(api_path)
 
     if resp:
         j = resp.json()
