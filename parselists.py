@@ -30,6 +30,7 @@ def main():
 
     if (length < 10) or (length > 1000):
         print(f'Apparently bad fetch {venue} musicians list: len {length}')
+        print('response.text:\n', musicians.text)
         exit(1)
 
     all_musicians = csv.reader(musicians.iter_lines(decode_unicode=True))
