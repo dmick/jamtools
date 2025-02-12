@@ -79,7 +79,10 @@ def main():
 
     if args.list2:
         for r in rows:
-            print(f'{r["artist"]} - {r["song"]}')
+            if 'artist' in r and 'song' in r:
+                print(f'{r["artist"]} - {r["song"]}')
+            else:
+                print()
         return 0
 
     if args.list:
