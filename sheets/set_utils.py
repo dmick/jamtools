@@ -82,7 +82,7 @@ def get_rows(sheetservice, sheetdate, sheetid):
     for i, s in enumerate(songs):
 
         # make sentinel "no title, artist, or vocalist"
-        if not s or (len(s) >= 2 and not s[0] and not s[1] and not s[2]):
+        if (i >= 20 and not s) or (len(s) >= 2 and not s[0] and not s[1] and not s[2]):
             break
 
         # ..or Tune to recorded tuning
