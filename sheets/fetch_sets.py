@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+import datetime
 
 import sys
 import google_utils
@@ -50,6 +51,9 @@ def main():
             startdate_int = date_to_int(args.start)
         if args.date:
             date_int = date_to_int(args.date)
+        now = datetime.datetime.now(tz=datetime.
+            timezone(-datetime.timedelta(hours=8)))
+        today_int = date_to_int(now.strftime("%Y-%m-%d"))
 
         for idrow in date_and_ids:
             if len(idrow) != 2:
@@ -62,8 +66,7 @@ def main():
             sheetdate, sheetid = idrow[0], idrow[1]
             sheetdate_int = date_to_int(sheetdate)
             if args.start:
-                if sheetdate_int > startdate_int:
-                    output = True
+                output = (sheetdate_int >= startdate_int) and (sheetdate_int <= today_int)
             elif args.date:
                 if sheetdate_int == date_int:
                     output = True
