@@ -50,7 +50,7 @@ def get_rows(sheetservice, sheetdate, sheetid):
 
     # there was at least one setlist with "GUITAR 2 (Elec)".
     # Strip any parenthesized phrases
-    colnames = [re.sub('\(.*\)', '', s) for s in colnames]
+    colnames = [re.sub(r'\(.*\)', '', s) for s in colnames]
     colnames = stripws(colnames)
 
     # allow columns to be in a different order or have
