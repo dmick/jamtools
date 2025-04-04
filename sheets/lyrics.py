@@ -153,10 +153,17 @@ def fetch_and_retry(song, artist):
 
 
 def fetch_override(song, artist, extra=None):
+    '''
     resp = requests.get(f'https://lastcalllive.rocks/lyrics-override/{artist}-{song}.txt')
     if resp.status_code != 200:
         return None
     return resp.text
+    '''
+    try:
+        f = open(f'/var/www/html/lyrics-override/{artist}-{song}.txt', 'r')
+        return f.read()
+    except FileNotFoundError:
+        pass
 
 
 def fetch_api_path(path):
@@ -174,6 +181,12 @@ def fetch_api_path(path):
 def fetch_lyrics(song, artist, extra=None):
     if not song or not artist:
         return f'<incomplete request {song=} {artist=}>'
+
+    # look for local override for custom/unfindable lyrics
+    resp = fetch_override(song, artist, extra)
+    if resp:
+        return resp
+
     quoted_artist = urllib.parse.quote_plus(artist)
     quoted_song = urllib.parse.quote_plus(song)
 
