@@ -12,6 +12,7 @@ import pprint
 import re
 import json
 import mailbox
+import zoneinfo
 
 def getfield(parts, name, stripchars='<>'):
     try:
@@ -27,6 +28,7 @@ def parse_args():
     ap.add_argument('-t', '--to', help='To address to find')
     ap.add_argument('-o', '--orig-to', help='orig_to address to find')
     ap.add_argument('-T', '--truncate', action='store_true', help='Truncate "to" list')
+    ap.add_argument('-d', '--debug', action='store_true', help='show some debug')
     ap.add_argument('-j', '--json', action='store_true', help='json output')
     ap.add_argument('-m', '--msgid', action='store_true', help='parse host Sent box for msgids, show from/to/subject/date')
     ap.add_argument('-O', '--other', help='Other required strings for the log line')
@@ -83,6 +85,8 @@ def main():
         files = glob.glob('/var/log/mail.log*')
         files.sort(key=os.path.getmtime)
         args.files = files
+
+    # this server was always in UTC
     for name in args.files:
         if name.endswith('.gz'):
             f = gzip.open(name, 'rt')
@@ -96,11 +100,17 @@ def main():
             parts = line.split()
             parts = [p.strip(' ,') for p in parts]
 
-            dt_parts = parts[0:3]
-            parts = parts[3:]
-            dtval=datetime.datetime.strptime(
-                ' '.join(dt_parts) + ' ' + str(fileyear),'%b %d %H:%M:%S %Y')
-
+            # apparently logging, at least mail.log, has switched format
+            # to ISO8601
+            try:
+                dtval=datetime.datetime.fromisoformat(parts[0])
+                dtval=dtval.replace(tzinfo=None)
+                parts = parts[1:]
+            except ValueError:
+                dt_parts = parts[0:3]
+                parts = parts[3:]
+                dtval=datetime.datetime.strptime(
+                    ' '.join(dt_parts) + ' ' + str(fileyear),'%b %d %H:%M:%S %Y')
             # skip hostname, logger name/pid
             parts = parts[2:]
 
@@ -111,6 +121,9 @@ def main():
             status = getfield(parts, 'status')
 
             if to or messageid or fr or orig_to:
+                if args.debug:
+                    print(f'{line=}')
+                    print(f'date={dtval} {to=} from={fr} {orig_to=} {status=}')
                 qid = parts.pop(0).rstrip(':')
                 md = msgs[qid]
                 md['origline'] = line.strip()
@@ -128,6 +141,7 @@ def main():
 
             if orig_to:
                 md['orig_to'] = orig_to
+
 
         f.close()
 
