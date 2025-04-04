@@ -12,7 +12,7 @@ import set_utils
 ALL_SETLISTS_SHEETID = '1hxuvHuYAYcxQlOE4KCaeoiSrgZC95OOk3B2Ciu6LAiM'
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--id', help='Google spreadsheet ID to read and csv-ize')
     parser.add_argument('-d', '--date', help='Date of set to fetch (MM/DD/YYYY or YYYY-MM-DD)')
@@ -21,7 +21,7 @@ def parse_args():
     parser.add_argument('-L', '--list2', action='store_true', help='output only artist - title')
     return parser.parse_args()
 
-def date_to_int(d):
+def date_to_int(d:str) -> int:
     if '-' in d:
         # YYYY-MM-DD, like HTML input type=date
         year, month, day = map(int, d.split('-'))
@@ -31,7 +31,7 @@ def date_to_int(d):
     date_int = int(f'{year}{month:02d}{day:02d}')
     return date_int
 
-def main():
+def main() -> int:
     args = parse_args()
 
     sheetservice = google_utils.get_sheetservice()
@@ -47,6 +47,8 @@ def main():
         # get the cross-reference of dates/setlist sheets
         date_and_ids = set_utils.get_and_retry_on_rate_limit(sheetservice, ALL_SETLISTS_SHEETID, 'A:B')
 
+        startdate_int = 0
+        date_int = 0
         if args.start:
             startdate_int = date_to_int(args.start)
         if args.date:
@@ -71,7 +73,8 @@ def main():
                 if sheetdate_int == date_int:
                     output = True
             else:
-                output = True
+                if sheetdate_int <= today_int:
+                    output = True
 
             if output:
                 rows += set_utils.get_rows(sheetservice, sheetdate, sheetid)

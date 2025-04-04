@@ -2,8 +2,9 @@ import google_utils
 import re
 import sys
 import time
+import typing
 
-FIELDS = {
+FIELDS: dict[str, list[str|tuple[str, ...]]] = {
         'Default': ['SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS',],
         '11/21/2022': ['SONG', 'ARTIST', 'VOCAL', 'KEYS', 'KEYS 2', ('GUITAR', 'GUITAR 1'), 'BASS', 'DRUMS',],
         '1/16/2023': ['SONG', 'ARTIST', 'VOCAL', ('GUITAR 1a', 'GUITAR 1'), ('GUITAR 1b', 'GUITAR 2'), 'BASS', 'DRUMS', 'KEYS',],
@@ -13,17 +14,17 @@ SYNTHESIZED_FIELDS = ['DATE', 'SONGNUM']
 # you might think "set", but these need to stay ordered, and it's simpler to just declare them
 ALLFIELDS = SYNTHESIZED_FIELDS + ['SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS', 'KEYS 2',]
 
-def stripws(l):
+def stripws(l: list[str]) -> list[str]:
     return [s.strip() for s in l]
 
-def cleanfields(fields):
+def cleanfields(fields: list[str]) -> list[str]:
     return [f.lower().replace(' ', '')  for f in fields]
 
-def date_to_int(datestr):
+def date_to_int(datestr: str) -> str:
     m, d, y = (int(f) for f in datestr.split('/'))
     return f'{y}{m:02d}{d:02d}'
 
-def get_and_retry_on_rate_limit(sheet, sheetid, rng):
+def get_and_retry_on_rate_limit(sheet, sheetid: str, rng: str) -> list[list[str]]:
     sleeptime = 1
     fail = True
     while fail:
@@ -43,9 +44,10 @@ def get_and_retry_on_rate_limit(sheet, sheetid, rng):
     return result
 
 
-def get_rows(sheetservice, sheetdate, sheetid):
+def get_rows(sheetservice, sheetdate: str, sheetid: str) -> list[str]:
 
     # may throw HttpError
+    colnames: list[str]
     colnames = get_and_retry_on_rate_limit(sheetservice, sheetid, 'C1:L1')[0]
 
     # there was at least one setlist with "GUITAR 2 (Elec)".
@@ -57,6 +59,12 @@ def get_rows(sheetservice, sheetdate, sheetid):
     # column names we're ignoring
     #
     # rename some fields (noted in tuples in FIELDS
+    fields: list[str]
+    if typing.TYPE_CHECKING:
+        reveal_type(fields)
+        reveal_type(FIELDS)
+        reveal_type(FIELDS['Default'])
+
     fields = FIELDS.get(sheetdate, FIELDS['Default'])
     colnums = []
     ofields = SYNTHESIZED_FIELDS.copy()
