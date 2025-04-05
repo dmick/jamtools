@@ -1,5 +1,5 @@
 import re
-import requests
+import httpx
 import sys
 import urllib.parse
 
@@ -154,7 +154,7 @@ def fetch_and_retry(song, artist):
 
 def fetch_override(song, artist, extra=None):
     '''
-    resp = requests.get(f'https://lastcalllive.rocks/lyrics-override/{artist}-{song}.txt')
+    resp = httpx.get(f'https://lastcalllive.rocks/lyrics-override/{artist}-{song}.txt')
     if resp.status_code != 200:
         return None
     return resp.text
@@ -168,7 +168,7 @@ def fetch_override(song, artist, extra=None):
 
 def fetch_api_path(path):
     url = f'https://lrclib.net/api/{path}'
-    resp = requests.get(url)
+    resp = httpx.get(url)
     if resp.status_code == 404:
         return None
     j = resp.json()
