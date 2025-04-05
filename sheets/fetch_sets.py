@@ -35,7 +35,7 @@ def main() -> int:
     args = parse_args()
 
     sheetservice = google_utils.get_sheetservice()
-    rows = []
+    rows:list[dict[str, str]] = []
 
     if ((args.id or args.date) and args.start):
         print("--id/--date and --start are mutually exclusive", file=sys.stderr)
@@ -84,9 +84,9 @@ def main() -> int:
         return 1
 
     if args.list2:
-        for r in rows:
-            if 'artist' in r and 'song' in r:
-                print(f'{r["artist"]} - {r["song"]}')
+        for row in rows:
+            if 'artist' in row and 'song' in row:
+                print(f'{row["artist"]} - {row["song"]}')
             else:
                 print()
         return 0

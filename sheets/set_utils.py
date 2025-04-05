@@ -10,9 +10,9 @@ FIELDS: dict[str, list[str|tuple[str, ...]]] = {
         '1/16/2023': ['SONG', 'ARTIST', 'VOCAL', ('GUITAR 1a', 'GUITAR 1'), ('GUITAR 1b', 'GUITAR 2'), 'BASS', 'DRUMS', 'KEYS',],
 }
 
-SYNTHESIZED_FIELDS = ['DATE', 'SONGNUM']
+SYNTHESIZED_FIELDS:list[str] = ['DATE', 'SONGNUM']
 # you might think "set", but these need to stay ordered, and it's simpler to just declare them
-ALLFIELDS = SYNTHESIZED_FIELDS + ['SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS', 'KEYS 2',]
+ALLFIELDS:list[str] = SYNTHESIZED_FIELDS + ['SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS', 'KEYS 2',]
 
 def stripws(l: list[str]) -> list[str]:
     return [s.strip() for s in l]
@@ -39,12 +39,12 @@ def get_and_retry_on_rate_limit(sheet, sheetid: str, rng: str) -> list[list[str]
             sleeptime *= 2
             continue
 
-    result = result.get('values', [])
+    result = result.get('values', []) # type: ignore
 
     return result
 
 
-def get_rows(sheetservice, sheetdate: str, sheetid: str) -> list[str]:
+def get_rows(sheetservice, sheetdate: str, sheetid: str) -> list[dict[str, str]]:
 
     # may throw HttpError
     colnames: list[str]
@@ -59,14 +59,9 @@ def get_rows(sheetservice, sheetdate: str, sheetid: str) -> list[str]:
     # column names we're ignoring
     #
     # rename some fields (noted in tuples in FIELDS
-    fields: list[str]
-    if typing.TYPE_CHECKING:
-        reveal_type(fields)
-        reveal_type(FIELDS)
-        reveal_type(FIELDS['Default'])
-
+    fields: list[str|tuple[str, ...]]
     fields = FIELDS.get(sheetdate, FIELDS['Default'])
-    colnums = []
+    colnums: list[int] = []
     ofields = SYNTHESIZED_FIELDS.copy()
 
     for f in fields:
