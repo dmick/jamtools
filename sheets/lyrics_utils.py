@@ -1,9 +1,15 @@
+import csv
 import re
 import httpx
 import sys
+import time
 import urllib.parse
+from subprocess import Popen, PIPE
+from concurrent.futures import ThreadPoolExecutor, Future
+from typing import Tuple
 
 SEPARATOR = f'\n{"=" * 30}\n'
+
 
 re_subs_artist = [
     # remove any comment
@@ -93,7 +99,6 @@ def fetch_and_retry(song, artist):
 
     # 1) try prepending 'The ' to the artist name
     new_artist = 'The ' + artist
-    print(f'Looking for {song} {new_artist}', file=sys.stderr)
     if (lyrics := fetch_lyrics(song, new_artist)):
         return lyrics
 
@@ -222,3 +227,189 @@ def search_song(song, artist):
             if artist in m['artistName']:
                 return m['plainLyrics']
     return None
+
+
+""" def run_command(args, data=None):
+    # print(f'{args=} {data=}', file=open('/tmp/tmp', 'w'))
+    if isinstance(args, str):
+        args = args.split(' ')
+
+    p = Popen(args, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    if data:
+        out, err = p.communicate(data.encode())
+    else:
+        out, err = p.communicate()
+    # print(f'{out=} {err=}', file=open('/tmp/output', 'w'))
+    return p.returncode, out, err
+
+LISTCMD = '/home/dmick/src/git/jamtools/sheets/fetch_sets.py -l -d %s' """
+
+CSS = '''
+<style>
+html {
+        scroll-behavior: smooth;
+}
+p {
+        margin: 0px 10px 0px 0px;
+        color:white;
+        background-color: black;
+        font-family: sans-serif;
+        font-size: 65px;
+        font-weight: 500;
+        font-style: sans;
+        letter-spacing: 0px;
+        text-align: center;
+}
+</style>'''
+SCROLL_SCRIPT = '''
+<body onkeydown="scrollfunc(event)">
+<script>
+function scrollfunc(e) {
+        let scrolldist = window.innerHeight / 2;
+        if (e.key == "PageDown") {
+                window.scrollBy(0, scrolldist);
+                e.preventDefault();
+        } else if (e.key == "PageUp") {
+                window.scrollBy(0, -scrolldist);
+                e.preventDefault();
+        }
+}
+</script>'''
+HEADER = '<html><body>'
+FOOTER = '</body></html>'
+
+
+def format_lyrics(song, artist, lyrics, html):
+    if lyrics:
+        lyrics = f'{SEPARATOR}\n{song} - {artist}\n\n{lyrics}'
+    else:
+        lyrics = f'{SEPARATOR}\n*** {song} - {artist}: Lyrics not found ***'
+
+    if html:
+        html_lyrics = ''
+        for l in lyrics.split('\n'):
+            l = l.strip()
+            if not len(l):
+                l = '&nbsp'
+            html_lyrics += f'<p>{l}</p>\n'
+        return html_lyrics
+    else:
+        return lyrics
+
+
+def do_fetch_seq_setlist(rows, html):
+    if html:
+        retstr = f'{HEADER}\n{CSS}\n{SCROLL_SCRIPT}\n'
+    else:
+        retstr = ''
+
+    for row in rows:
+        song = row['song']
+        artist = row['artist']
+        start = time.time()
+        lyr = fetch_and_retry(song, artist)
+        print(f'*** {time.time() - start} to fetch {song},{artist}')
+        retstr += format_lyrics(song, artist, lyr, html) + '\n'
+
+    if html:
+        retstr += f'{FOOTER}\n'
+
+    return retstr
+
+
+def do_fetch_setlist(setlist:str|list[str], html=False):
+
+    retstr = ''
+    if html:
+        retstr = f'{HEADER}\n{CSS}\n{SCROLL_SCRIPT}\n'
+
+    if isinstance(setlist, list):
+        songs = setlist
+    else:
+        if setlist.split('\n')[0].strip() != 'song,artist':
+            setlist = 'song,artist\n' + setlist
+        set_list = [line.strip() for line in setlist.split('\n')]
+        csvreader = csv.DictReader(set_list)
+        songs = [(r['song'], r['artist']) for r in csvreader]
+
+    print(f'{songs=}')
+    futures = []
+    with ThreadPoolExecutor(max_workers=20) as e:
+        for song, artist in songs:
+            print(f'*** Starting search for {song} {artist}')
+            futures.append(e.submit(do_fetch_song, song, artist, html))
+
+    failures: list[str] = []
+    for f in futures:
+        found, song, artist, res = f.result()
+        print(f'result: {res}')
+        retstr += res + '\n'
+        if not found:
+            failures.append(f'{song} - {artist}')
+
+    if html:
+        retstr += f'{FOOTER}\n'
+
+    return failures, retstr
+
+def do_fetch_song(song:str, artist:str, html:bool) -> Tuple[bool, str, str, str]:
+    # returns song, artist so that when used concurrently one can tie
+    # the return value to the request
+    lyrics = fetch_and_retry(song, artist)
+    return bool(lyrics), song, artist, format_lyrics(song, artist, lyrics, html)
+
+
+def input_form(action, dateonly=False):
+    # define this to avoid having to use {{ everywhere in the f-string 
+    style = '''
+<style>
+  body, form, input, textarea, button {
+    font-size: 18px; 
+  }
+  #setlistlabel, #setlist {
+    display: block;
+  } 
+    
+</style>
+'''
+
+    lyrics_form_guts = '''
+<label id="datelabel" for="date">Date</label>
+<input type="date" id="date" name="date">
+<button type="button" onclick="document.getElementById('date').value=0">Clear date</button>
+<p></p>
+<label for="setlist" id="setlistlabel">-- OR -- enter a setlist here (lines of song,artist, Date must be cleared):</label>
+<textarea id="setlist" name="setlist" rows="5" cols="40">One,U2\nTwo Hearts Beat As One,U2</textarea>
+<p></p>
+<input type=checkbox id="html" name="html" value="true">
+<label for="html" id="htmllabel">Output HTML</label>
+<p></p>
+<button type="submit" id="go">Go</button>
+'''
+
+    dateonly_form_guts = '''
+  <label id="datelabel" for="date">Date</label>
+  <input type="date" id="date" name="date">
+  <p></p>
+  <button type="submit" id="go">Go</button>
+'''
+
+    if dateonly:
+        guts = dateonly_form_guts
+    else:
+        guts = lyrics_form_guts
+
+    formstr = (f'''
+<html>
+<head>
+{style}
+</head>
+<body>
+<form method=GET action="{action}">
+
+  {guts}
+
+</form>
+</body>
+</html>''')
+    return formstr

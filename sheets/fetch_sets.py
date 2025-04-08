@@ -1,4 +1,4 @@
-#!/home/dmick/src/sheets/v/bin/python3
+#!/home/dmick/src/git/jamtools/sheets/v/bin/python3
 
 import argparse
 import csv
@@ -9,7 +9,6 @@ import google_utils
 import set_utils
 
 
-ALL_SETLISTS_SHEETID = '1hxuvHuYAYcxQlOE4KCaeoiSrgZC95OOk3B2Ciu6LAiM'
 
 
 def parse_args() -> argparse.Namespace:
@@ -21,63 +20,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('-L', '--list2', action='store_true', help='output only artist - title')
     return parser.parse_args()
 
-def date_to_int(d:str) -> int:
-    if '-' in d:
-        # YYYY-MM-DD, like HTML input type=date
-        year, month, day = map(int, d.split('-'))
-    else:
-        # MM/DD/YYYY
-        month, day, year = map(int, d.split('/'))
-    date_int = int(f'{year}{month:02d}{day:02d}')
-    return date_int
-
 def main() -> int:
     args = parse_args()
 
-    sheetservice = google_utils.get_sheetservice()
     rows:list[dict[str, str]] = []
 
     if ((args.id or args.date) and args.start):
         print("--id/--date and --start are mutually exclusive", file=sys.stderr)
         return 1
 
-    if args.id and args.date:
-        rows = (set_utils.get_rows(sheetservice, args.date, args.id))
-    else:
-        # get the cross-reference of dates/setlist sheets
-        date_and_ids = set_utils.get_and_retry_on_rate_limit(sheetservice, ALL_SETLISTS_SHEETID, 'A:B')
-
-        startdate_int = 0
-        date_int = 0
-        if args.start:
-            startdate_int = date_to_int(args.start)
-        if args.date:
-            date_int = date_to_int(args.date)
-        now = datetime.datetime.now(tz=datetime.
-            timezone(-datetime.timedelta(hours=8)))
-        today_int = date_to_int(now.strftime("%Y-%m-%d"))
-
-        for idrow in date_and_ids:
-            if len(idrow) != 2:
-                break
-            # if args.start, don't output until date is after args.start
-            # if args.date, don't output unless date == args.date
-            # if we're here, we didn't have both args.id and args.date
-
-            output = False
-            sheetdate, sheetid = idrow[0], idrow[1]
-            sheetdate_int = date_to_int(sheetdate)
-            if args.start:
-                output = (sheetdate_int >= startdate_int) and (sheetdate_int <= today_int)
-            elif args.date:
-                if sheetdate_int == date_int:
-                    output = True
-            else:
-                if sheetdate_int <= today_int:
-                    output = True
-
-            if output:
-                rows += set_utils.get_rows(sheetservice, sheetdate, sheetid)
+    rows = set_utils.find_set(args.id, args.start, args.date)
 
     if args.date and len(rows) == 0:
         print(f'No set found for {args.date}', file=sys.stderr)

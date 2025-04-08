@@ -1,8 +1,11 @@
+import datetime
 import google_utils
 import re
 import sys
 import time
 import typing
+
+ALL_SETLISTS_SHEETID = '1hxuvHuYAYcxQlOE4KCaeoiSrgZC95OOk3B2Ciu6LAiM'
 
 FIELDS: dict[str, list[str|tuple[str, ...]]] = {
         'Default': ['SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS',],
@@ -20,16 +23,24 @@ def stripws(l: list[str]) -> list[str]:
 def cleanfields(fields: list[str]) -> list[str]:
     return [f.lower().replace(' ', '')  for f in fields]
 
-def date_to_int(datestr: str) -> str:
-    m, d, y = (int(f) for f in datestr.split('/'))
-    return f'{y}{m:02d}{d:02d}'
+def date_to_int(d:str) -> int:
+    if '-' in d:
+        # YYYY-MM-DD, like HTML input type=date
+        year, month, day = map(int, d.split('-'))
+    else:
+        # MM/DD/YYYY
+        month, day, year = map(int, d.split('/'))
+    date_int = int(f'{year}{month:02d}{day:02d}')
+    return date_int
 
-def get_and_retry_on_rate_limit(sheet, sheetid: str, rng: str) -> list[list[str]]:
+
+def get_and_retry_on_rate_limit(sheetid: str, rng: str) -> list[list[str]]:
+    sheetservice = google_utils.get_sheetservice()
     sleeptime = 1
     fail = True
     while fail:
         try:
-            result = sheet.values().get(spreadsheetId=sheetid, range=rng).execute()
+            result = sheetservice.values().get(spreadsheetId=sheetid, range=rng).execute()
             fail = False
         except google_utils.HttpError as err:
             if '429' not in str(err):
@@ -44,11 +55,11 @@ def get_and_retry_on_rate_limit(sheet, sheetid: str, rng: str) -> list[list[str]
     return result
 
 
-def get_rows(sheetservice, sheetdate: str, sheetid: str) -> list[dict[str, str]]:
+def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
 
     # may throw HttpError
     colnames: list[str]
-    colnames = get_and_retry_on_rate_limit(sheetservice, sheetid, 'C1:L1')[0]
+    colnames = get_and_retry_on_rate_limit(sheetid, 'C1:L1')[0]
 
     # there was at least one setlist with "GUITAR 2 (Elec)".
     # Strip any parenthesized phrases
@@ -81,7 +92,7 @@ def get_rows(sheetservice, sheetdate: str, sheetid: str) -> list[dict[str, str]]
     ofields = cleanfields(ofields)
 
     rows = []
-    songs = get_and_retry_on_rate_limit(sheetservice, sheetid, 'C3:L')
+    songs = get_and_retry_on_rate_limit(sheetid, 'C3:L')
     for i, s in enumerate(songs):
 
         # make sentinel "no title, artist, or vocalist"
@@ -93,7 +104,7 @@ def get_rows(sheetservice, sheetdate: str, sheetid: str) -> list[dict[str, str]]
             break
 
         s = stripws(s)
-        values = [date_to_int(sheetdate), i+1]
+        values:list[str] = [str(date_to_int(sheetdate)), str(i+1)]
         for colnum in colnums:
             try:
                 values.append(s[colnum])
@@ -112,3 +123,50 @@ def get_rows(sheetservice, sheetdate: str, sheetid: str) -> list[dict[str, str]]
 
     return rows
 
+def find_set(sheetid, start, date):
+    if sheetid and date:
+        rows = (get_rows(date, sheetid))
+    else:
+        # get the cross-reference of dates/setlist sheets
+        date_and_ids = get_and_retry_on_rate_limit(ALL_SETLISTS_SHEETID, 'A:B')
+
+        startdate_int = -2
+        date_int = -2
+        if start:
+            startdate_int = date_to_int(start)
+        if date:
+            date_int = date_to_int(date)
+        now = datetime.datetime.now(tz=datetime.
+            timezone(-datetime.timedelta(hours=6)))
+        today_int = date_to_int(now.strftime("%Y-%m-%d"))
+
+        rows = []
+
+        print(f'{date_int=}')
+        for idrow in date_and_ids:
+            if len(idrow) == 0:
+                break
+
+            # if date, look for date == args.date, and return that if found
+            # if start, don't output until date is after args.start
+            # if we're here, we didn't have both id and args.date
+
+            output = False
+            sheetdate, sheetid = idrow
+            sheetdate_int = date_to_int(sheetdate)
+            # just return it once found
+            if date:
+                if (sheetdate_int == date_int):
+                    return get_rows(sheetdate, sheetid)
+                continue
+
+            if start:
+                output = (sheetdate_int >= startdate_int) and (sheetdate_int <= today_int)
+            else:
+                if sheetdate_int <= today_int:
+                    output = True
+
+            if output:
+                rows += get_rows(sheetdate, sheetid)
+
+    return rows

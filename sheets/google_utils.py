@@ -1,25 +1,26 @@
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+# from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 # svcacct
 from google.oauth2 import service_account
 import os
+import functools
 
-if (SERVICE_ACCOUNT_FILE := os.environ.get('SERVICEACCOUNTFILE')) is None:
-    SERVICE_ACCOUNT_FILE = '/home/dmick/src/sheets/serviceaccount.key'
+DEFAULT_CREDFILE = os.path.expanduser('~/.config/googleserviceaccount.key')
 # If modifying these scopes in AppFlow, delete token.json.
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
-def get_creds_service_account():
+def _get_creds_service_account(credfile):
     creds = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        credfile, scopes=SCOPES)
     return creds
 
-def get_sheetservice():
+@functools.cache
+def get_sheetservice(credfile=DEFAULT_CREDFILE):
     # hook up to the Google API
-    creds = get_creds_service_account()
+    creds = _get_creds_service_account(credfile)
     service = build('sheets', 'v4', credentials=creds)
     sheetservice = service.spreadsheets()
     return sheetservice

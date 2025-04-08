@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import csv
-from lyrics import fetch_and_retry, SEPARATOR
+from lyrics_utils import fetch_and_retry, SEPARATOR
 import sys
 
 def main():
