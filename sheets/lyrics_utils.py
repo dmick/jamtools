@@ -378,11 +378,12 @@ def input_form(action, dateonly=False):
 <input type="date" id="date" name="date">
 <button type="button" onclick="document.getElementById('date').value=0">Clear date</button>
 <p></p>
-<label for="setlist" id="setlistlabel">-- OR -- enter a setlist here (lines of song,artist, Date must be cleared):</label>
+<label for="setlist" id="setlistlabel">-- OR -- enter a setlist here (lines of song,artist)<br>Date must be cleared:</label>
+<p></p>
 <textarea id="setlist" name="setlist" rows="5" cols="40">One,U2\nTwo Hearts Beat As One,U2</textarea>
 <p></p>
 <input type=checkbox id="html" name="html" value="true">
-<label for="html" id="htmllabel">Output HTML</label>
+<label for="html" id="htmllabel">Output HTML (run show from browser)</label>
 <p></p>
 <button type="submit" id="go">Go</button>
 '''
