@@ -8,17 +8,25 @@ import csv
 
 import os
 from concurrent.futures import ThreadPoolExecutor, Future
-import time
+from sqlmodel import SQLModel, create_engine, Field, Session
 
 app = FastAPI()
 
-def timed(func):
-    def wrap(*args, **kwargs):
-        start = time.time()
-        res = func(*args, **kwargs)
-        elapsed = time.time() - start
-        return elapsed, res
-    return wrap
+class Lyrics(SQLModel, table=True):
+    song: str = Field(primary_key=True)
+    artist: str = Field(primary_key=True)
+    lyrics: str
+
+sqlite_file_name = "/home/dmick/src/jamtools/lyrics.db"
+sqlite_url = f"sqlite:///{sqlite_file_name}"
+
+engine = create_engine(sqlite_url, echo=True)
+
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
 
 
 @app.get('/lyrics')
@@ -38,7 +46,6 @@ async def do_lyrics(
         return response
 
     print(f'{setlist=} {date=} {html=} {seq=}')
-    overall_start = time.time()
     if date:
         print(f'{setlist=} {date=} {html=} {seq=}')
         rows = set_utils.find_set(None, None, date)
@@ -58,7 +65,6 @@ async def do_lyrics(
 
     if not dohtml:
         formatted_lyrics = '<pre>\n' + formatted_lyrics + '\n</pre>'
-    print(f'request time: {time.time() - overall_start}')
 
     if failures:
         failures = '\\n'.join((['NOT_FOUND:\\n'] + failures))
