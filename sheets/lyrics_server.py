@@ -12,11 +12,14 @@ class Lyrics(SQLModel, table=True):
     artist: str = Field(primary_key=True)
     lyrics: str
 
-sqlite_file_name = "/home/dmick/src/jamtools/lyrics.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
+# really need a config file
+SQLITE_FILE = "/home/dmick/src/jamtools/lyrics.db"
+
+sqlite_url = f"sqlite:///{SQLITE_FILE}"
 
 engine = create_engine(sqlite_url)
 
+# arrange for the DB to be created on app startup
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
