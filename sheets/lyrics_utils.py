@@ -7,6 +7,7 @@ import urllib.parse
 from subprocess import Popen, PIPE
 from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Tuple
+from copy import deepcopy
 
 SEPARATOR = f'\n{"=" * 30}\n'
 
@@ -73,7 +74,7 @@ def cleanup(which, s):
     return s
 
 
-def fetch_and_retry(song, artist):
+def fetch_and_retry(song: str, artist:str) -> str | None:
     # first add any extra params if we know it'll help isolate the
     # particular song we want
 
@@ -229,21 +230,6 @@ def search_song(song, artist):
     return None
 
 
-""" def run_command(args, data=None):
-    # print(f'{args=} {data=}', file=open('/tmp/tmp', 'w'))
-    if isinstance(args, str):
-        args = args.split(' ')
-
-    p = Popen(args, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    if data:
-        out, err = p.communicate(data.encode())
-    else:
-        out, err = p.communicate()
-    # print(f'{out=} {err=}', file=open('/tmp/output', 'w'))
-    return p.returncode, out, err
-
-LISTCMD = '/home/dmick/src/git/jamtools/sheets/fetch_sets.py -l -d %s' """
-
 CSS = '''
 <style>
 html {
@@ -281,9 +267,9 @@ FOOTER = '</body></html>'
 
 def format_lyrics(song, artist, lyrics, html):
     if lyrics:
-        lyrics = f'{SEPARATOR}\n{song} - {artist}\n\n{lyrics}'
+        lyrics = f'{SEPARATOR}\n{song} - {artist}\n\n{lyrics}\n'
     else:
-        lyrics = f'{SEPARATOR}\n*** {song} - {artist}: Lyrics not found ***'
+        lyrics = f'{SEPARATOR}\n*** {song} - {artist}: Lyrics not found ***\n'
 
     if html:
         html_lyrics = ''
@@ -297,79 +283,68 @@ def format_lyrics(song, artist, lyrics, html):
         return lyrics
 
 
-def do_fetch_seq_setlist(rows, html):
-    if html:
-        retstr = f'{HEADER}\n{CSS}\n{SCROLL_SCRIPT}\n'
-    else:
-        retstr = ''
-
-    for row in rows:
-        song = row['song']
-        artist = row['artist']
-        start = time.time()
-        lyr = fetch_and_retry(song, artist)
-        print(f'*** {time.time() - start} to fetch {song},{artist}')
-        retstr += format_lyrics(song, artist, lyr, html) + '\n'
-
-    if html:
-        retstr += f'{FOOTER}\n'
-
-    return retstr
-
-
-def do_fetch_setlist(setlist:str|list[str], html=False):
+def format_setlist(setlist: list[dict], html:bool = False) -> str:
 
     retstr = ''
     if html:
         retstr = f'{HEADER}\n{CSS}\n{SCROLL_SCRIPT}\n'
-
-    if isinstance(setlist, list):
-        songs = setlist
     else:
-        if setlist.split('\n')[0].strip() != 'song,artist':
-            setlist = 'song,artist\n' + setlist
-        set_list = [line.strip() for line in setlist.split('\n')]
-        csvreader = csv.DictReader(set_list)
-        songs = [(r['song'], r['artist']) for r in csvreader]
+        retstr = '<pre>\n'
 
-    print(f'{songs=}')
-    futures = []
-    with ThreadPoolExecutor(max_workers=20) as e:
-        for song, artist in songs:
-            print(f'*** Starting search for {song} {artist}')
-            futures.append(e.submit(do_fetch_song, song, artist, html))
-
-    failures: list[str] = []
-    for f in futures:
-        found, song, artist, res = f.result()
-        print(f'result: {res}')
-        retstr += res + '\n'
-        if not found:
-            failures.append(f'{song} - {artist}')
+    for row in setlist:
+        retstr += format_lyrics(row['song'], row['artist'], row['lyrics'], html)
 
     if html:
         retstr += f'{FOOTER}\n'
+    else:
+        retstr += '</pre>\n'
+    return retstr
 
-    return failures, retstr
 
-def do_fetch_song(song:str, artist:str, html:bool) -> Tuple[bool, str, str, str]:
+def do_fetch_setlist(setlist:list[dict], html=False) -> Tuple[list[str], list[dict]]:
+    __doc__= '''
+    For any song in setlist that does not already have lyrics, search for it
+    and return a list of failures in the form 'Song - Artist', and a copy
+    of setlist with the missing lyrics filled in
+    '''
+    ret: list[dict] = deepcopy(setlist)
+    futures = []
+    with ThreadPoolExecutor(max_workers=20) as e:
+        for index, row in enumerate(setlist):
+            if row.get('lyrics'):
+                continue
+            song, artist = row['song'], row['artist']
+            print(f'do_fetch_setlist looking for {song} {artist}')
+            futures.append(e.submit(do_fetch_song, index, song, artist))
+
+    failures: list[str] = []
+    for f in futures:
+        index, song, artist, lyrics = f.result()
+        ret[index]['lyrics'] = lyrics
+        if not lyrics:
+            failures.append(f'{song} - {artist}')
+
+    return failures, ret
+
+
+def do_fetch_song(index: int, song:str, artist:str) -> Tuple[int, str, str, str|None]:
     # returns song, artist so that when used concurrently one can tie
     # the return value to the request
     lyrics = fetch_and_retry(song, artist)
-    return bool(lyrics), song, artist, format_lyrics(song, artist, lyrics, html)
+    return index, song, artist, lyrics
 
 
 def input_form(action, dateonly=False):
-    # define this to avoid having to use {{ everywhere in the f-string 
+    # define this to avoid having to use {{ everywhere in the f-string
     style = '''
 <style>
   body, form, input, textarea, button {
-    font-size: 18px; 
+    font-size: 18px;
   }
   #setlistlabel, #setlist {
     display: block;
-  } 
-    
+  }
+
 </style>
 '''
 

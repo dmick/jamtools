@@ -1,16 +1,11 @@
-from fastapi import FastAPI, Response, Query
+from fastapi import FastAPI, Response
 from fastapi.responses import PlainTextResponse, HTMLResponse
 
-from lyrics_utils import do_fetch_setlist, do_fetch_seq_setlist, do_fetch_song, HEADER, FOOTER, CSS, SCROLL_SCRIPT, input_form
-import google_utils
+from lyrics_utils import do_fetch_setlist, format_setlist, input_form
 import set_utils
-import csv
 
-import os
-from concurrent.futures import ThreadPoolExecutor, Future
-from sqlmodel import SQLModel, create_engine, Field, Session
-
-app = FastAPI()
+from sqlmodel import SQLModel, create_engine, Field, Session, select
+from contextlib import asynccontextmanager
 
 class Lyrics(SQLModel, table=True):
     song: str = Field(primary_key=True)
@@ -20,14 +15,14 @@ class Lyrics(SQLModel, table=True):
 sqlite_file_name = "/home/dmick/src/jamtools/lyrics.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
-engine = create_engine(sqlite_url, echo=True)
+engine = create_engine(sqlite_url)
 
-def create_db_and_tables():
-    SQLModel.metadata.create_all(engine)
-
+@asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_db_and_tables()
+    SQLModel.metadata.create_all(engine)
+    yield
 
+app = FastAPI(lifespan=lifespan)
 
 @app.get('/lyrics')
 async def do_lyrics(
@@ -40,31 +35,50 @@ async def do_lyrics(
     dohtml:bool = html is not None
     doseq:bool = seq is not None
 
-    failures = list()
     if not (setlist or date):
         response = HTMLResponse(input_form('/lyrics', dateonly=False))
         return response
 
-    print(f'{setlist=} {date=} {html=} {seq=}')
+    set_with_lyrics: list[dict] = []
     if date:
-        print(f'{setlist=} {date=} {html=} {seq=}')
         rows = set_utils.find_set(None, None, date)
-        setlist = [(r['song'], r['artist']) for r in rows]
-        print(f'date, {setlist=}')
+        set_with_lyrics = [{'song' :r['song'], 'artist': r['artist'], 'lyrics':None} for r in rows]
+    elif setlist:
+        setlist_lines = setlist.split('\n')
+        for sl in setlist_lines:
+            song, artist = sl.split(',')
+            set_with_lyrics.append({'song':song, 'artist':artist, 'lyrics': None})
 
-    failures, formatted_lyrics = do_fetch_setlist(setlist, dohtml)
-    print(f'{failures=}')
-    if dohtml:
-        formatted_lyrics = '\n'.join((
-            HEADER,
-            CSS,
-            SCROLL_SCRIPT,
-            formatted_lyrics,
-            FOOTER,
-        ))
+    # load any cached lyrics
+    with Session(engine) as session:
+        for row in set_with_lyrics:
+            song, artist = row['song'], row['artist']
+            results = session.exec(
+                select(Lyrics).where(
+                    Lyrics.song == song and
+                    Lyrics.artist == artist
+                )
+            )
+            if newlyrobj := results.one_or_none():
+                print(f'found cached lyrics for {song}, {artist}')
+                row['lyrics'] = newlyrobj.lyrics
 
-    if not dohtml:
-        formatted_lyrics = '<pre>\n' + formatted_lyrics + '\n</pre>'
+    failures = list()
+    failures, fetched_set = do_fetch_setlist(set_with_lyrics, dohtml)
+
+    # save any lyrics we just got
+    with Session(engine) as session:
+        for row, newrow in zip(set_with_lyrics, fetched_set):
+            if row['lyrics'] is None and newrow['lyrics'] is not None:
+                print(f'got new lyrics for {newrow["song"]} {newrow["artist"]}')
+                session.add(Lyrics(
+                    song=newrow['song'],
+                    artist=newrow['artist'],
+                    lyrics=newrow['lyrics']
+                ))
+        session.commit()
+
+    formatted_lyrics = format_setlist(fetched_set, dohtml)
 
     if failures:
         failures = '\\n'.join((['NOT_FOUND:\\n'] + failures))
@@ -79,7 +93,7 @@ async def do_lyrics(
 @app.get('/setlist')
 async def do_setlist(
     date: str|None = None,
-    ) -> PlainTextResponse:
+    ) -> Response:
 
     if not date:
         return HTMLResponse(input_form('/setlist', dateonly=True))

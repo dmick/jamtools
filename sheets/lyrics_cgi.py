@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 
-from lyrics import do_fetch_setlist
 import os
 import sys
 from urllib.parse import parse_qs
-from lyrics_utils import input_form
+from lyrics_utils import input_form, do_fetch_setlist, format_setlist
+
 from set_utils import find_set
 
 def print_form(action=os.environ['SCRIPT_NAME']):
@@ -19,26 +19,27 @@ def main():
     date = qd.get('date')
     setlist = qd.get('setlist')
     html = qd.get('html')
+    rows = list()
+
     if date:
         date = date[0]
+
     if setlist:
         setlist_str = setlist[0]
+        songs = setlist_str.split('\n')
+        for s in songs:
+            song, artist = s.split(',')
+            rows.append() = {'song':song, 'artist':artist, 'lyrics':None}
 
     if not date and not setlist:
         print_form()
         return 0
 
-    if isinstance(setlist, list):
-        setlist_str = '\n'.join(setlist)
-    else:
-        setlist_str = setlist
     if date:
-        setlist_str = ''
         rows = find_set(None, None, None, date)
-        for row in rows:
-            setlist_str += f'{row["song"]},{row["artist"]}\n'
 
-    print(do_fetch_setlist(setlist_str, html is None))
+    lyrics = do_fetch_setlist(setlist_str, html is None)
+    print(format_setlist(lyrics, html is not None))
 
 
 if __name__ == "__main__":
