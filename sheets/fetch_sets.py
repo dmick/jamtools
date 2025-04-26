@@ -1,4 +1,4 @@
-#!/home/dmick/src/git/jamtools/sheets/v/bin/python3
+#!/home/dmick/src/jamtools/sheets/v/bin/python3
 
 import argparse
 import csv

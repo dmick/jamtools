@@ -6,16 +6,14 @@ import set_utils
 
 from sqlmodel import SQLModel, create_engine, Field, Session, select
 from contextlib import asynccontextmanager
+import config
 
 class Lyrics(SQLModel, table=True):
     song: str = Field(primary_key=True)
     artist: str = Field(primary_key=True)
     lyrics: str
 
-# really need a config file
-SQLITE_FILE = "/home/dmick/src/jamtools/lyrics.db"
-
-sqlite_url = f"sqlite:///{SQLITE_FILE}"
+sqlite_url = f"sqlite:///{config.SQLITE_FILE}"
 
 engine = create_engine(sqlite_url)
 

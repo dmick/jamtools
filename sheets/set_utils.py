@@ -4,8 +4,8 @@ import re
 import sys
 import time
 import typing
+import config
 
-ALL_SETLISTS_SHEETID = '1hxuvHuYAYcxQlOE4KCaeoiSrgZC95OOk3B2Ciu6LAiM'
 
 FIELDS: dict[str, list[str|tuple[str, ...]]] = {
         'Default': ['SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS',],
@@ -128,7 +128,7 @@ def find_set(sheetid, start, date):
         rows = (get_rows(date, sheetid))
     else:
         # get the cross-reference of dates/setlist sheets
-        date_and_ids = get_and_retry_on_rate_limit(ALL_SETLISTS_SHEETID, 'A:B')
+        date_and_ids = get_and_retry_on_rate_limit(config.ALL_SETLISTS_SHEETID, 'A:B')
 
         startdate_int = -2
         date_int = -2

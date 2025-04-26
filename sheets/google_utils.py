@@ -6,8 +6,8 @@ from googleapiclient.errors import HttpError
 from google.oauth2 import service_account
 import os
 import functools
+import config
 
-DEFAULT_CREDFILE = os.path.expanduser('~/.config/googleserviceaccount.key')
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
 @functools.cache
@@ -16,9 +16,9 @@ def _get_creds_service_account(credfile):
         credfile, scopes=SCOPES)
 
 @functools.cache
-def get_sheetservice(credfile=DEFAULT_CREDFILE):
+def get_sheetservice(credfile=config.DEFAULT_CREDFILE):
     # hook up to the Google API
-    creds = _get_creds_service_account(credfile)
+    creds = _get_creds_service_account(os.path.expanduser(credfile))
     service = build('sheets', 'v4', credentials=creds)
     return service.spreadsheets()
 

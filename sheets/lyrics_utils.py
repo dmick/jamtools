@@ -8,6 +8,7 @@ from subprocess import Popen, PIPE
 from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Tuple
 from copy import deepcopy
+import config
 
 SEPARATOR = f'\n{"=" * 30}\n'
 
@@ -230,41 +231,6 @@ def search_song(song, artist):
     return None
 
 
-CSS = '''
-<style>
-html {
-        scroll-behavior: smooth;
-}
-p {
-        margin: 0px 10px 0px 0px;
-        color:white;
-        background-color: black;
-        font-family: sans-serif;
-        font-size: 65px;
-        font-weight: 500;
-        font-style: sans;
-        letter-spacing: 0px;
-        text-align: center;
-}
-</style>'''
-SCROLL_SCRIPT = '''
-<body onkeydown="scrollfunc(event)">
-<script>
-function scrollfunc(e) {
-        let scrolldist = window.innerHeight / 2;
-        if (e.key == "PageDown") {
-                window.scrollBy(0, scrolldist);
-                e.preventDefault();
-        } else if (e.key == "PageUp") {
-                window.scrollBy(0, -scrolldist);
-                e.preventDefault();
-        }
-}
-</script>'''
-HEADER = '<html><body>'
-FOOTER = '</body></html>'
-
-
 def format_lyrics(song, artist, lyrics, html):
     if lyrics:
         lyrics = f'{SEPARATOR}\n{song} - {artist}\n\n{lyrics}\n'
@@ -287,7 +253,7 @@ def format_setlist(setlist: list[dict], html:bool = False) -> str:
 
     retstr = ''
     if html:
-        retstr = f'{HEADER}\n{CSS}\n{SCROLL_SCRIPT}\n'
+        retstr = f'{config.HEADER}\n{config.CSS}\n{config.SCROLL_SCRIPT}\n'
     else:
         retstr = '<pre>\n'
 
@@ -295,7 +261,7 @@ def format_setlist(setlist: list[dict], html:bool = False) -> str:
         retstr += format_lyrics(row['song'], row['artist'], row['lyrics'], html)
 
     if html:
-        retstr += f'{FOOTER}\n'
+        retstr += f'{config.FOOTER}\n'
     else:
         retstr += '</pre>\n'
     return retstr
@@ -335,50 +301,16 @@ def do_fetch_song(index: int, song:str, artist:str) -> Tuple[int, str, str, str|
 
 
 def input_form(action, dateonly=False):
-    # define this to avoid having to use {{ everywhere in the f-string
-    style = '''
-<style>
-  body, form, input, textarea, button {
-    font-size: 18px;
-  }
-  #setlistlabel, #setlist {
-    display: block;
-  }
-
-</style>
-'''
-
-    lyrics_form_guts = '''
-<label id="datelabel" for="date">Date</label>
-<input type="date" id="date" name="date">
-<button type="button" onclick="document.getElementById('date').value=0">Clear date</button>
-<p></p>
-<label for="setlist" id="setlistlabel">-- OR -- enter a setlist here (lines of song,artist)<br>Date must be cleared:</label>
-<p></p>
-<textarea id="setlist" name="setlist" rows="5" cols="40">One,U2\nTwo Hearts Beat As One,U2</textarea>
-<p></p>
-<input type=checkbox id="html" name="html" value="true">
-<label for="html" id="htmllabel">Output HTML (run show from browser)</label>
-<p></p>
-<button type="submit" id="go">Go</button>
-'''
-
-    dateonly_form_guts = '''
-  <label id="datelabel" for="date">Date</label>
-  <input type="date" id="date" name="date">
-  <p></p>
-  <button type="submit" id="go">Go</button>
-'''
 
     if dateonly:
-        guts = dateonly_form_guts
+        guts = config.DATEONLY_FORM
     else:
-        guts = lyrics_form_guts
+        guts = config.LYRICS_FORM
 
     formstr = (f'''
 <html>
 <head>
-{style}
+{config.INPUT_FORM_STYLE}
 </head>
 <body>
 <form method=GET action="{action}">
