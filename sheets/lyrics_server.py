@@ -43,6 +43,9 @@ async def do_lyrics(
     set_with_lyrics: list[dict] = []
     if date:
         rows = set_utils.find_set(None, None, date)
+        if not rows:
+            dialog = f'<script>alert("Oops, no set found for {date}")</script>'
+            return HTMLResponse(content=dialog)
         set_with_lyrics = [{'song' :r['song'], 'artist': r['artist'], 'lyrics':None} for r in rows]
     elif setlist:
         setlist_lines = setlist.split('\n')
@@ -101,7 +104,8 @@ async def do_setlist(
 
     rows = set_utils.find_set(None, None, date)
     if not rows:
-        return PlainTextResponse(content=f'No set found for {date}')
+        dialog = f'<script>alert("Oops, no set found for {date}")</script>'
+        return HTMLResponse(content=dialog)
 
     setlist = [f'{row["song"]}, {row["artist"]}' for row in rows]
     setlist.append('')
