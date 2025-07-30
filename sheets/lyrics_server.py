@@ -107,9 +107,9 @@ async def do_setlist(
         dialog = f'<script>alert("Oops, no set found for {date}")</script>'
         return HTMLResponse(content=dialog)
 
-    setlist = [f'{row["song"]}, {row["artist"]}' for row in rows]
+    setlist = [f'{row.get("song")}, {row.get("artist")}' for row in rows]
     setlist.append('')
-    setlist.extend([f'{row["artist"]} - {row["song"]}' for row in rows])
+    setlist.extend([f'{row.get("artist")} - {row.get("song")}' for row in rows])
     setlist.append('')
 
     response = PlainTextResponse(content='\n'.join(setlist))
