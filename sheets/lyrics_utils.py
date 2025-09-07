@@ -9,6 +9,9 @@ from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Tuple
 from copy import deepcopy
 import config
+import logging
+
+log = logging.getLogger(__name__)
 
 SEPARATOR = f'\n{"=" * 30}\n'
 
@@ -167,7 +170,9 @@ def fetch_override(song, artist, extra=None):
     return resp.text
     '''
     try:
-        f = open(f'/var/www/html/lyrics-override/{artist}-{song}.txt', 'r')
+        name=f'/var/www/html/lyrics-override/{artist}-{song}.txt'
+        f = open(name, 'r')
+        log.info(f'override found: {name}')
         return f.read()
     except FileNotFoundError:
         pass
@@ -180,7 +185,7 @@ def fetch_api_path(path):
         return None
     j = resp.json()
     if resp.status_code == 400:
-        print(f'{j["name"]}: {j["message"]}', file=sys.stderr)
+        log.info(f'{j["name"]}: {j["message"]}', file=sys.stderr)
         return None
     return resp
 
@@ -277,10 +282,11 @@ def do_fetch_setlist(setlist:list[dict], html=False) -> Tuple[list[str], list[di
     futures = []
     with ThreadPoolExecutor(max_workers=20) as e:
         for index, row in enumerate(setlist):
-            if row.get('lyrics'):
-                continue
             song, artist = row['song'], row['artist']
-            print(f'do_fetch_setlist looking for {song} {artist}')
+            if row.get('lyrics'):
+                log.info(f'already have lyrics for {song} {artist}')
+                continue
+            log.info(f'do_fetch_setlist looking for {song} {artist}')
             futures.append(e.submit(do_fetch_song, index, song, artist))
 
     failures: list[str] = []
@@ -288,7 +294,10 @@ def do_fetch_setlist(setlist:list[dict], html=False) -> Tuple[list[str], list[di
         index, song, artist, lyrics = f.result()
         ret[index]['lyrics'] = lyrics
         if not lyrics:
+            log.info(f'failed to find {song} {artist}')
             failures.append(f'{song} - {artist}')
+        else:
+            log.info(f'found {song} {artist}')
 
     return failures, ret
 

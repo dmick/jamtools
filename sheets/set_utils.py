@@ -5,7 +5,9 @@ import sys
 import time
 import typing
 import config
+import logging
 
+log = logging.getLogger(__name__)
 
 FIELDS: dict[str, list[str|tuple[str, ...]]] = {
         'Default': ['SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS',],
@@ -45,7 +47,7 @@ def get_and_retry_on_rate_limit(sheetid: str, rng: str) -> list[list[str]]:
         except google_utils.HttpError as err:
             if '429' not in str(err):
                 raise(err)
-            print(f'{sheetid} {rng} ratelimited; pausing for {sleeptime} seconds', file=sys.stderr)
+            log.info(f'{sheetid} {rng} ratelimited; pausing for {sleeptime} seconds', file=sys.stderr)
             time.sleep(sleeptime)
             sleeptime *= 2
             continue
@@ -78,13 +80,13 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
     for f in fields:
         if isinstance(f, tuple):
             fieldname, fieldnewname = f
-            print(f'{sheetdate}: renaming {fieldname} to {fieldnewname}', file=sys.stderr)
+            log.info(f'{sheetdate}: renaming {fieldname} to {fieldnewname}', file=sys.stderr)
         else:
             fieldname, fieldnewname = f, None
         try:
             colnum = colnames.index(fieldname)
         except ValueError:
-            print(f'no {fieldname} on {sheetdate}??', file=sys.stderr)
+            log.info(f'no {fieldname} on {sheetdate}??', file=sys.stderr)
             continue
         colnums.append(colnum)
         ofields.append(fieldnewname or fieldname)
@@ -142,7 +144,7 @@ def find_set(sheetid, start, date):
 
         rows = []
 
-        print(f'{date_int=}')
+        log.info(f'{date_int=}')
         for idrow in date_and_ids:
             if len(idrow) == 0:
                 break

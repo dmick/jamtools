@@ -8,6 +8,17 @@ from sqlmodel import SQLModel, create_engine, Field, Session, select
 from contextlib import asynccontextmanager
 import config
 
+import logging
+import sys
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    stream=sys.stderr,
+    format='%(asctime)s %(name)s:%(levelname)s %(message)s'
+
+)
+log = logging.getLogger(__name__)
+
 class Lyrics(SQLModel, table=True):
     song: str = Field(primary_key=True)
     artist: str = Field(primary_key=True)
@@ -64,7 +75,7 @@ async def do_lyrics(
                 )
             )
             if newlyrobj := results.one_or_none():
-                print(f'found cached lyrics for {song}, {artist}')
+                log.info(f'found cached lyrics for {song}, {artist}')
                 row['lyrics'] = newlyrobj.lyrics
 
     failures = list()
@@ -74,7 +85,7 @@ async def do_lyrics(
     with Session(engine) as session:
         for row, newrow in zip(set_with_lyrics, fetched_set):
             if row['lyrics'] is None and newrow['lyrics'] is not None:
-                print(f'got new lyrics for {newrow["song"]} {newrow["artist"]}')
+                log.info(f'got new lyrics for {newrow["song"]} {newrow["artist"]}')
                 session.add(Lyrics(
                     song=newrow['song'],
                     artist=newrow['artist'],
