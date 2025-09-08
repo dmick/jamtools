@@ -78,20 +78,24 @@ async def do_lyrics(
                 log.info(f'found cached lyrics for {song}, {artist}')
                 row['lyrics'] = newlyrobj.lyrics
 
-    failures = list()
-    failures, fetched_set = do_fetch_setlist(set_with_lyrics, dohtml)
+    if all([r["lyrics"] is not None for r in set_with_lyrics]):
+        log.info("all lyrics cached, skipping fetch")
+        failures = None
+        fetched_set = set_with_lyrics
+    else:
+        failures, fetched_set = do_fetch_setlist(set_with_lyrics)
 
-    # save any lyrics we just got
-    with Session(engine) as session:
-        for row, newrow in zip(set_with_lyrics, fetched_set):
-            if row['lyrics'] is None and newrow['lyrics'] is not None:
-                log.info(f'got new lyrics for {newrow["song"]} {newrow["artist"]}')
-                session.add(Lyrics(
-                    song=newrow['song'],
-                    artist=newrow['artist'],
-                    lyrics=newrow['lyrics']
-                ))
-        session.commit()
+        # save any lyrics we just got
+        with Session(engine) as session:
+            for row, newrow in zip(set_with_lyrics, fetched_set):
+                if row['lyrics'] is None and newrow['lyrics'] is not None:
+                    log.info(f'got new lyrics for {newrow["song"]} {newrow["artist"]}')
+                    session.add(Lyrics(
+                        song=newrow['song'],
+                        artist=newrow['artist'],
+                        lyrics=newrow['lyrics']
+                    ))
+            session.commit()
 
     formatted_lyrics = format_setlist(fetched_set, dohtml)
 
