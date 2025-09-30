@@ -47,7 +47,7 @@ def get_and_retry_on_rate_limit(sheetid: str, rng: str) -> list[list[str]]:
         except google_utils.HttpError as err:
             if '429' not in str(err):
                 raise(err)
-            log.info(f'{sheetid} {rng} ratelimited; pausing for {sleeptime} seconds', file=sys.stderr)
+            log.info(f'{sheetid} {rng} ratelimited; pausing for {sleeptime} seconds')
             time.sleep(sleeptime)
             sleeptime *= 2
             continue
@@ -80,13 +80,13 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
     for f in fields:
         if isinstance(f, tuple):
             fieldname, fieldnewname = f
-            log.info(f'{sheetdate}: renaming {fieldname} to {fieldnewname}', file=sys.stderr)
+            log.info(f'{sheetdate}: renaming {fieldname} to {fieldnewname}')
         else:
             fieldname, fieldnewname = f, None
         try:
             colnum = colnames.index(fieldname)
         except ValueError:
-            log.info(f'no {fieldname} on {sheetdate}??', file=sys.stderr)
+            log.info(f'no {fieldname} on {sheetdate}??')
             continue
         colnums.append(colnum)
         ofields.append(fieldnewname or fieldname)

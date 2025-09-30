@@ -185,7 +185,7 @@ def fetch_api_path(path):
         return None
     j = resp.json()
     if resp.status_code == 400:
-        log.info(f'{j["name"]}: {j["message"]}', file=sys.stderr)
+        log.info(f'{j["name"]}: {j["message"]}')
         return None
     return resp
 
