@@ -29,6 +29,8 @@ def date_to_int(d:str) -> int:
     if '-' in d:
         # YYYY-MM-DD, like HTML input type=date
         year, month, day = map(int, d.split('-'))
+        if year <= 12:
+            month, day, year = year, month, day
     else:
         # MM/DD/YYYY
         month, day, year = map(int, d.split('/'))
