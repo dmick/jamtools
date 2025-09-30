@@ -61,6 +61,10 @@ async def do_lyrics(
     elif setlist:
         setlist_lines = setlist.split('\n')
         for sl in setlist_lines:
+            sl = sl.strip()
+            if len(sl) == 0:
+                continue
+            log.info(f'setlist input: {sl}')
             song, artist = sl.split(',')
             set_with_lyrics.append({'song':song, 'artist':artist, 'lyrics': None})
 
