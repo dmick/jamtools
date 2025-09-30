@@ -126,7 +126,14 @@ async def do_setlist(
         dialog = f'<script>alert("Oops, no set found for {date}")</script>'
         return HTMLResponse(content=dialog)
 
-    setlist = [f'{row.get("song")}, {row.get("artist")}' for row in rows]
+    def poss_quote(s):
+        if ',' in s:
+            return f'"{s}"'
+        return s
+
+    setlist = [
+        f'{poss_quote(row.get("song"))},{poss_quote(row.get("artist"))}' for row in rows
+    ]
     setlist.append('')
     setlist.extend([f'{row.get("artist")} - {row.get("song")}' for row in rows])
     setlist.append('')
