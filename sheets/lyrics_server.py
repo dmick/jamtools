@@ -41,19 +41,20 @@ async def do_lyrics(
     setlist: str|None = None,
     date: str|None = None,
     html: str|None = None,
+    sheetid: str|None = None,
     seq: str|None = None,
     ) -> Response:
 
     dohtml:bool = html is not None
     doseq:bool = seq is not None
 
-    if not (setlist or date):
+    if not (setlist or date or sheetid):
         response = HTMLResponse(input_form('/lyrics', dateonly=False))
         return response
 
     set_with_lyrics: list[dict] = []
-    if date:
-        rows = set_utils.find_set(None, None, date)
+    if date or sheetid:
+        rows = set_utils.find_set(sheetid, None, date)
         if not rows:
             dialog = f'<script>alert("Oops, no set found for {date}")</script>'
             return HTMLResponse(content=dialog)
@@ -116,12 +117,13 @@ async def do_lyrics(
 @app.get('/setlist')
 async def do_setlist(
     date: str|None = None,
+    sheetid: str|None = None,
     ) -> Response:
 
-    if not date:
+    if not (date or sheetid):
         return HTMLResponse(input_form('/setlist', dateonly=True))
 
-    rows = set_utils.find_set(None, None, date)
+    rows = set_utils.find_set(sheetid, None, date)
     if not rows:
         dialog = f'<script>alert("Oops, no set found for {date}")</script>'
         return HTMLResponse(content=dialog)

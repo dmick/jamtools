@@ -63,6 +63,9 @@ LYRICS_FORM = '''
 <p></p>
 <textarea id="setlist" name="setlist" rows="5" cols="40">One,U2\nTwo Hearts Beat As One,U2</textarea>
 <p></p>
+<label for="sheetid">SheetID</label>
+<input type="text" id="sheetid" name="sheetid">
+<p></p>
 <input type=checkbox id="html" name="html" value="true">
 <label for="html" id="htmllabel">Output HTML (run show from browser)</label>
 <p></p>
@@ -72,6 +75,9 @@ LYRICS_FORM = '''
 DATEONLY_FORM = '''
   <label id="datelabel" for="date">Date</label>
   <input type="date" id="date" name="date">
+  <p></p>
+  <label for="sheetid">SheetID</label>
+  <input type="text" id="sheetid" name="sheetid">
   <p></p>
   <button type="submit" id="go">Go</button>
 '''

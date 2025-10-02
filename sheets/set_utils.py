@@ -128,7 +128,10 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
     return rows
 
 def find_set(sheetid, start, date):
-    if sheetid and date:
+    now = datetime.datetime.now(tz=datetime.
+        timezone(-datetime.timedelta(hours=6)))
+    if sheetid:
+        date = date or now.strftime("%Y-%m-%d")
         rows = (get_rows(date, sheetid))
     else:
         # get the cross-reference of dates/setlist sheets
@@ -140,8 +143,6 @@ def find_set(sheetid, start, date):
             startdate_int = date_to_int(start)
         if date:
             date_int = date_to_int(date)
-        now = datetime.datetime.now(tz=datetime.
-            timezone(-datetime.timedelta(hours=6)))
         today_int = date_to_int(now.strftime("%Y-%m-%d"))
 
         rows = []
