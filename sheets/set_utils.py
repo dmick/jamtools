@@ -63,7 +63,27 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
 
     # may throw HttpError
     colnames: list[str]
-    colnames = get_and_retry_on_rate_limit(sheetid, 'C1:L1')[0]
+
+    # deduce form of sheet.  Two variants of header:
+    # 1: song | artist | others (freeform setlist)
+    # 2: blank | number | time | song | artist | vocal | etc. (Monday Live setlist)
+    # look at col A; if it has no header and has a digit 1 in the first nonblank row,
+    # assume form 2
+
+    form_to_range: dict[int, list[str, str]] = {
+        1: ['A1:B1', 'A3:B',],
+        2: ['C1:L1', 'C3:L',],
+    }
+
+    colA = get_and_retry_on_rate_limit(sheetid, 'A1:A10')
+    if not colA[0] and not colA[1] and colA[2] == ['1']:
+        form = 2
+    else:
+        form = 1
+
+    colrange, datarange = form_to_range[form]
+
+    colnames = get_and_retry_on_rate_limit(sheetid, colrange)[0]
 
     # there was at least one setlist with "GUITAR 2 (Elec)".
     # Strip any parenthesized phrases
@@ -96,16 +116,22 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
     ofields = cleanfields(ofields)
 
     rows = []
-    songs = get_and_retry_on_rate_limit(sheetid, 'C3:L')
+
+    songs = get_and_retry_on_rate_limit(sheetid, datarange)
     for i, s in enumerate(songs):
 
-        # make sentinel "no title, artist, or vocalist"
-        if (i >= 20 and not s) or (len(s) >= 2 and not s[0] and not s[1] and not s[2]):
-            break
+        if form == 1:
+            # no song is the sentinal:
+            if not s[0]:
+                break
+        elif form == 2:
+            # make sentinel "no title, artist, or vocalist"
+            if (i >= 20 and not s) or (len(s) >= 2 and not s[0] and not s[1] and not s[2]):
+                break
 
-        # ..or Tune to recorded tuning
-        if s and s[0].startswith('Tune to'):
-            break
+            # ..or Tune to recorded tuning
+            if s and s[0].startswith('Tune to'):
+                break
 
         s = stripws(s)
         values:list[str] = [str(date_to_int(sheetdate)), str(i+1)]
