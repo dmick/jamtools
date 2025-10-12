@@ -59,6 +59,42 @@ def get_and_retry_on_rate_limit(sheetid: str, rng: str) -> list[list[str]]:
     return result
 
 
+def end_of_songs(songs, i, form):
+    # scanning through songs, we're at row i, and want to know
+    # if it appears to be the last song.
+
+    def empty(l):
+        # defined: list is empty if all elements are empty or whitespace
+        ltext = ''.join([i.strip() for i in l])
+        return not ltext
+
+    s = songs[i]
+    if i+1 < len(songs):
+        ns = songs[i+1]
+    else:
+        ns = []
+
+    if form == 1:
+        # no song is the sentinel:
+        if not s[0]:
+            return True
+
+    elif form == 2:
+        # at least at row 20, and row is empty, and the following row is empty too
+        if (i >= 20 and empty(s) and empty(ns)):
+            return True
+
+        # row is empty in song/artist, and so is next row
+        if empty(s[0:2]) and empty(ns[0:2]):
+            return True
+
+        # ..or Tune to recorded tuning
+        if s and s[0].startswith('Tune to'):
+            return True
+
+    return False
+
+
 def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
 
     # may throw HttpError
@@ -119,20 +155,8 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
 
     songs = get_and_retry_on_rate_limit(sheetid, datarange)
     for i, s in enumerate(songs):
-
-        if form == 1:
-            # no song is the sentinal:
-            if not s[0]:
-                break
-        elif form == 2:
-            # make sentinel "no title, artist, or vocalist"
-            if (i >= 20 and not s) or (len(s) >= 2 and not s[0] and not s[1] and not s[2]):
-                break
-
-            # ..or Tune to recorded tuning
-            if s and s[0].startswith('Tune to'):
-                break
-
+        if end_of_songs(songs, i, form):
+            break
         s = stripws(s)
         values:list[str] = [str(date_to_int(sheetdate)), str(i+1)]
         for colnum in colnums:
