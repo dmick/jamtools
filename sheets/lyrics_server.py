@@ -58,7 +58,7 @@ async def do_lyrics(
         if not rows:
             dialog = f'<script>alert("Oops, no set found for {date}")</script>'
             return HTMLResponse(content=dialog)
-        set_with_lyrics = [{'song' :r['song'], 'artist': r['artist'], 'lyrics':None} for r in rows]
+        set_with_lyrics = [{'song' :r.get('song'), 'artist': r.get('artist'), 'lyrics':None} for r in rows]
     elif setlist:
         setlist_lines = setlist.split('\n')
         for sl in setlist_lines:
@@ -72,16 +72,17 @@ async def do_lyrics(
     # load any cached lyrics
     with Session(engine) as session:
         for row in set_with_lyrics:
-            song, artist = row['song'], row['artist']
-            results = session.exec(
-                select(Lyrics).where(
-                    Lyrics.song == song and
-                    Lyrics.artist == artist
+            song, artist = row.get('song'), row.get('artist')
+            if song and artist:
+                results = session.exec(
+                    select(Lyrics).where(
+                        Lyrics.song == song and
+                        Lyrics.artist == artist
+                    )
                 )
-            )
-            if newlyrobj := results.one_or_none():
-                log.info(f'found cached lyrics for {song}, {artist}')
-                row['lyrics'] = newlyrobj.lyrics
+                if newlyrobj := results.one_or_none():
+                    log.info(f'found cached lyrics for {song}, {artist}')
+                    row['lyrics'] = newlyrobj.lyrics
 
     if all([r["lyrics"] is not None for r in set_with_lyrics]):
         log.info("all lyrics cached, skipping fetch")
@@ -93,7 +94,7 @@ async def do_lyrics(
         # save any lyrics we just got
         with Session(engine) as session:
             for row, newrow in zip(set_with_lyrics, fetched_set):
-                if row['lyrics'] is None and newrow['lyrics'] is not None:
+                if row.get('lyrics') is None and newrow.get('lyrics') is not None:
                     log.info(f'got new lyrics for {newrow["song"]} {newrow["artist"]}')
                     session.add(Lyrics(
                         song=newrow['song'],

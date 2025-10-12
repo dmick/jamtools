@@ -283,6 +283,8 @@ def do_fetch_setlist(setlist:list[dict], html=False) -> Tuple[list[str], list[di
     with ThreadPoolExecutor(max_workers=20) as e:
         for index, row in enumerate(setlist):
             song, artist = row['song'], row['artist']
+            if not song or not artist:
+                continue
             if row.get('lyrics'):
                 log.info(f'already have lyrics for {song} {artist}')
                 continue
