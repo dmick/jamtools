@@ -10,6 +10,8 @@ from typing import Tuple
 from copy import deepcopy
 import config
 import logging
+from datetime import datetime
+import os
 
 log = logging.getLogger(__name__)
 
@@ -163,19 +165,17 @@ def fetch_and_retry(song: str, artist:str) -> str | None:
 
 
 def fetch_override(song, artist, extra=None):
-    '''
-    resp = httpx.get(f'https://lastcalllive.rocks/lyrics-override/{artist}-{song}.txt')
-    if resp.status_code != 200:
-        return None
-    return resp.text
-    '''
+    song = song.strip()
+    artist = artist.strip()
     try:
         name=f'/var/www/html/lyrics-override/{artist}-{song}.txt'
+        log.info(f'override searching for: {name}')
         f = open(name, 'r')
-        log.info(f'override found: {name}')
-        return f.read()
+        mtime = datetime.fromtimestamp(os.path.getmtime(name))
+        log.info(f'override found: {name} date {mtime.isoformat()}')
+        return mtime, f.read()
     except FileNotFoundError:
-        pass
+        return None, None
 
 
 def fetch_api_path(path):
@@ -194,18 +194,8 @@ def fetch_lyrics(song, artist, extra=None):
     if not song or not artist:
         return f'<incomplete request {song=} {artist=}>'
 
-    # look for local override for custom/unfindable lyrics
-    resp = fetch_override(song, artist, extra)
-    if resp:
-        return resp
-
     quoted_artist = urllib.parse.quote_plus(artist)
     quoted_song = urllib.parse.quote_plus(song)
-
-    # look for local override for custom/unfindable lyrics
-    resp = fetch_override(song, artist, extra)
-    if resp:
-        return resp
 
     api_path = f'get?artist_name={quoted_artist}&track_name={quoted_song}'
     if extra:

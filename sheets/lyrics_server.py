@@ -1,10 +1,12 @@
+from datetime import datetime
 from fastapi import FastAPI, Response
 from fastapi.responses import PlainTextResponse, HTMLResponse
 
-from lyrics_utils import do_fetch_setlist, format_setlist, input_form
+from lyrics_utils import do_fetch_setlist, format_setlist, input_form, fetch_override
 import set_utils
 
 from sqlmodel import SQLModel, create_engine, Field, Session, select
+from typing import Optional
 from contextlib import asynccontextmanager
 import config
 
@@ -22,6 +24,7 @@ log = logging.getLogger(__name__)
 class Lyrics(SQLModel, table=True):
     song: str = Field(primary_key=True)
     artist: str = Field(primary_key=True)
+    mtime: Optional[datetime] = Field(default=None)
     lyrics: str
 
 sqlite_url = f"sqlite:///{config.SQLITE_FILE}"
@@ -42,11 +45,11 @@ async def do_lyrics(
     date: str|None = None,
     html: str|None = None,
     sheetid: str|None = None,
-    seq: str|None = None,
+    nocache: str|None = None,
     ) -> Response:
 
     dohtml:bool = html is not None
-    doseq:bool = seq is not None
+    nocache:bool = nocache is not None
 
     if not (setlist or date or sheetid):
         response = HTMLResponse(input_form('/lyrics', dateonly=False))
@@ -70,38 +73,58 @@ async def do_lyrics(
             set_with_lyrics.append({'song':song, 'artist':artist, 'lyrics': None})
 
     # load any cached lyrics
-    with Session(engine) as session:
-        for row in set_with_lyrics:
-            song, artist = row.get('song'), row.get('artist')
-            if song and artist:
-                results = session.exec(
-                    select(Lyrics).where(
-                        Lyrics.song == song and
-                        Lyrics.artist == artist
-                    )
-                )
-                if newlyrobj := results.one_or_none():
-                    log.info(f'found cached lyrics for {song}, {artist}')
-                    row['lyrics'] = newlyrobj.lyrics
-
-    if all([r["lyrics"] is not None for r in set_with_lyrics]):
-        log.info("all lyrics cached, skipping fetch")
-        failures = None
-        fetched_set = set_with_lyrics
-    else:
-        failures, fetched_set = do_fetch_setlist(set_with_lyrics)
-
-        # save any lyrics we just got
+    if not nocache:
         with Session(engine) as session:
-            for row, newrow in zip(set_with_lyrics, fetched_set):
-                if row.get('lyrics') is None and newrow.get('lyrics') is not None:
-                    log.info(f'got new lyrics for {newrow["song"]} {newrow["artist"]}')
-                    session.add(Lyrics(
-                        song=newrow['song'],
-                        artist=newrow['artist'],
-                        lyrics=newrow['lyrics']
-                    ))
-            session.commit()
+            for row in set_with_lyrics:
+                song, artist = row.get('song'), row.get('artist')
+                if song and artist:
+                    results = session.exec(
+                        select(Lyrics).where(
+                            Lyrics.song == song and
+                            Lyrics.artist == artist
+                        )
+                    )
+                    if db_obj := results.one_or_none():
+                        log.info(f'found db lyrics for {song}, {artist}')
+                        row['lyrics'] = db_obj.lyrics
+
+                    # whether or not we found it, look for overrides
+                    mtime, override_lyrics = fetch_override(song, artist)
+                    if override_lyrics and (
+                        (not db_obj or not db_obj.lyrics) or
+                        (mtime > db_obj.mtime)
+                        ):
+                        log.info(f'replacing {song}, {artist} with override lyrics from {mtime.isoformat()}')
+                        new_obj = Lyrics(
+                            song=song,
+                            artist=artist,
+                            lyrics=override_lyrics,
+                            mtime = mtime)
+                        row['lyrics'] = override_lyrics
+                        session.merge(new_obj)
+                        session.commit()
+    else:
+        log.info(f'Nocache set, not using db')
+
+    # fetch any that are not already set
+    failures, fetched_set = do_fetch_setlist(set_with_lyrics)
+
+    # save any lyrics we just fetched
+    with Session(engine) as session:
+        for row, newrow in zip(set_with_lyrics, fetched_set):
+            if row.get('lyrics') is None and newrow.get('lyrics') is not None:
+                log.info(f'got new lyrics for {newrow["song"]} {newrow["artist"]}')
+                obj = Lyrics(
+                    song=newrow['song'],
+                    artist=newrow['artist'],
+                    lyrics=newrow['lyrics'],
+                    mtime=datetime.now()
+                )
+                log.info(f'persisting new lyrics for {newrow["song"]} {newrow["artist"]} {mtime}')
+
+                merged = session.merge(obj)
+                session.add(merged)
+        session.commit()
 
     formatted_lyrics = format_setlist(fetched_set, dohtml)
 
