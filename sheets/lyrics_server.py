@@ -94,7 +94,7 @@ async def do_lyrics(
                         (not db_obj or not db_obj.lyrics) or
                         (mtime > db_obj.mtime)
                         ):
-                        log.info(f'replacing {song}, {artist} with override lyrics from {mtime.isoformat()}')
+                        log.info(f'replacing {song}, {artist} {db_obj.mtime} with override lyrics from {mtime.isoformat()}')
                         new_obj = Lyrics(
                             song=song,
                             artist=artist,
