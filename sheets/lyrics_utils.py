@@ -183,6 +183,7 @@ def fetch_api_path(path):
     resp = httpx.get(url)
     if resp.status_code == 404:
         return None
+    log.info(f'{url=} {resp.status_code=}')
     j = resp.json()
     if resp.status_code == 400:
         log.info(f'{j["name"]}: {j["message"]}')
