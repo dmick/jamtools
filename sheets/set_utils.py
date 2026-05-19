@@ -1,4 +1,5 @@
 import datetime
+from enum import Enum
 import google_utils
 import re
 import sys
@@ -59,7 +60,17 @@ def get_and_retry_on_rate_limit(sheetid: str, rng: str) -> list[list[str]]:
     return result
 
 
-def end_of_songs(songs, i, form):
+class Form(Enum):
+    SIMPLE = 1
+    BAND = 2
+
+form_to_range: dict[Form, list[str]] = {
+    Form.SIMPLE: ['A1:B1', 'A3:B',],
+    Form.BAND: ['C1:L1', 'C3:L',],
+}
+
+
+def end_of_songs(songs: list[list[str]], i: int, form: Form) -> bool:
     # scanning through songs, we're at row i, and want to know
     # if it appears to be the last song.
 
@@ -68,28 +79,28 @@ def end_of_songs(songs, i, form):
         ltext = ''.join([i.strip() for i in l])
         return not ltext
 
-    s = songs[i]
+    s: list[str] = songs[i]
     if i+1 < len(songs):
-        ns = songs[i+1]
+        ns: list[str] = songs[i+1]
     else:
         ns = []
 
-    if form == 1:
+    if form == Form.SIMPLE:
         # no song is the sentinel:
         if not s[0]:
             return True
 
-    elif form == 2:
+    elif form == Form.BAND:
         # at least at row 20, and row is empty, and the following row is empty too
         if (i >= 20 and empty(s) and empty(ns)):
             return True
 
-        # row is empty in song/artist, and so is next row
+        # row has no song/artist, and neither does next row
         if empty(s[0:2]) and empty(ns[0:2]):
             return True
 
         # ..or Tune to recorded tuning
-        if s and s[0].startswith('Tune to'):
+        if ns and (ns[0].startswith('Tune to') or ('Original Key' in ns[0])):
             return True
 
     return False
@@ -106,16 +117,22 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
     # look at col A; if it has no header and has a digit 1 in the first nonblank row,
     # assume form 2
 
-    form_to_range: dict[int, list[str, str]] = {
-        1: ['A1:B1', 'A3:B',],
-        2: ['C1:L1', 'C3:L',],
-    }
-
     colA = get_and_retry_on_rate_limit(sheetid, 'A1:A10')
-    if not colA[0] and not colA[1] and colA[2] == ['1']:
-        form = 2
+
+    found_1_as_first = False
+    for setnum in colA:
+        if not setnum:
+            continue
+        if setnum == ['1']:
+            found_1_as_first = True
+            break
+        if setnum[0].strip() != '':
+            break
+
+    if found_1_as_first:
+        form = Form.BAND
     else:
-        form = 1
+        form = Form.SIMPLE
 
     colrange, datarange = form_to_range[form]
 
