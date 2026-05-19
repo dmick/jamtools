@@ -130,7 +130,7 @@ async def do_setlist(
         return HTMLResponse(content=dialog)
 
     def poss_quote(s):
-        if ',' in s:
+        if s and ',' in s:
             return f'"{s}"'
         return s
 
