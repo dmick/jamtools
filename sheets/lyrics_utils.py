@@ -204,9 +204,18 @@ def fetch_lyrics(song, artist, extra=None):
             api_path=f'get/{extra[1]}'
         else:
             api_path += f'&{extra[0]}={urllib.parse.quote_plus(extra[1])}'
+    timeout = 1
     resp = fetch_api_path(api_path)
 
     if resp:
+        while resp.status_code == 429:
+            time.sleep(timeout)
+            timeout *= 2
+            if timeout >= 32:
+                log.error('timed out retrying {song} {artist}')
+                return None
+            resp = fetch_api_path(api_path)
+
         j = resp.json()
         if j['instrumental']:
             return '<Instrumental>'
