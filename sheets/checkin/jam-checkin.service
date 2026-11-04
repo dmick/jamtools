@@ -1,0 +1,14 @@
+[Unit]
+Description=Jam check-in API
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/jam-checkin
+Environment=CHECKIN_DB=/var/lib/jam-checkin/checkin.db
+ExecStart=/usr/bin/gunicorn -w 2 -b 127.0.0.1:8081 app:app
+Restart=on-failure
+StateDirectory=jam-checkin
+
+[Install]
+WantedBy=multi-user.target
