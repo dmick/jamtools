@@ -1,6 +1,8 @@
 from datetime import datetime
 from fastapi import FastAPI, Response
 from fastapi.responses import PlainTextResponse, HTMLResponse
+import csv
+import io
 
 from lyrics_utils import do_fetch_setlist, format_setlist, input_form, fetch_override
 import set_utils
@@ -165,5 +167,30 @@ async def do_setlist(
     setlist.append('')
 
     response = PlainTextResponse(content='\n'.join(setlist))
+    response.charset = 'utf-8'
+    return response
+
+
+@app.get('/setlist_full')
+async def do_setlist_full(
+    date: str|None = None,
+    sheetid: str|None = None,
+    ) -> Response:
+
+    if not (date or sheetid):
+        return HTMLResponse(input_form('/setlist_full', dateonly=True))
+
+    rows = set_utils.find_set(sheetid, None, date)
+    if not rows:
+        return PlainTextResponse(content=f'no set found for {date}', status_code=404)
+
+    # fixed header, so every row (and every set) has the same columns
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=set_utils.cleanfields(set_utils.ALLFIELDS), lineterminator='\n')
+    writer.writeheader()
+    writer.writerows(rows)
+
+    # no Content-Disposition: displayed inline, for fetching via XHR
+    response = PlainTextResponse(content=buf.getvalue(), media_type='text/csv')
     response.charset = 'utf-8'
     return response
