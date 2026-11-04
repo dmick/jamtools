@@ -14,7 +14,7 @@ h1{font-size:28px;margin:0;line-height:1}.sub{color:var(--mute);font-size:13px;m
 .stats{display:flex;gap:10px;margin:10px 0}.stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
 .stat b{font-size:30px;line-height:1;color:var(--amber)}.stat span{display:block;color:var(--mute);font-size:13px}
 .tabs{display:flex;gap:6px}.tabs button,.pill{font:600 15px Barlow,sans-serif;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;border-radius:999px;cursor:pointer}
-.tabs button{flex:1}.on,.pill.go{background:var(--amber)!important;color:#111!important;border-color:var(--amber)!important}
+.tabs button{flex:1;min-width:0;padding-left:8px;padding-right:8px}.on,.pill.go{background:var(--amber)!important;color:#111!important;border-color:var(--amber)!important}
 .bar{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center}
 h2{font-size:22px;margin:22px 0 8px;display:flex;justify-content:space-between;align-items:baseline}h2 small{font:500 14px Barlow,sans-serif;color:var(--mute)}
 .row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 7px;color:var(--ink);font:inherit;cursor:pointer;min-height:56px}
@@ -38,7 +38,7 @@ h2{font-size:22px;margin:22px 0 8px;display:flex;justify-content:space-between;a
 </style></head><body>
 <header><h1 id="ttl">Jam Check-in</h1><div class="sub" id="sync">Loading…</div>
 <div class="stats"><div class="stat"><b id="sA">0</b><span id="sAl">checked in</span></div><div class="stat"><b id="sB">0</b><span id="sBl">songs ready</span></div></div>
-<div class="tabs"><button id="t1" class="on">Check-in by call time</button><button id="t2">Songs</button></div></header>
+<div class="tabs"><button id="t1" class="on">Check in by time</button><button id="t2">Songs</button><button id="t3">Check in by name</button></div></header>
 <main id="main"></main>
 <div id="dlg"><div><b id="dT"></b><select id="dS"></select><button class="pill go" id="dOk">Save</button><button class="pill" id="dNo">Cancel</button></div></div>
 
@@ -133,11 +133,13 @@ function render() {
   const st = songs.map(songState), ros = roster(), names = Object.keys(ros);
   $('sA').textContent = names.filter(n => here.has(n)).length; $('sAl').textContent = 'of ' + names.length + ' checked in';
   $('sB').textContent = st.filter(x => x.ready).length; $('sBl').textContent = 'of ' + songs.length + ' songs ready';
-  $('t1').className = tab == 1 ? 'on' : ''; $('t2').className = tab == 2 ? 'on' : '';
+  $('t1').className = tab == 1 ? 'on' : ''; $('t2').className = tab == 2 ? 'on' : ''; $('t3').className = tab == 3 ? 'on' : '';
   $('sync').textContent = date + (online ? ' · live, shared with all organizers' : ' · offline, retrying…');
+  const waitBar = '<div class="bar"><button class="pill'+(onlyWait?' on':'')+'" data-a="wait">Show only people not here yet</button></div>';
+  const addBar = '<div class="add"><input id="addN" maxlength="100" placeholder="Add a walk-in or sub by name"><button class="pill go" data-a="add">Check in</button></div>';
   let h = '';
   if (tab == 1) {
-    h += '<div class="bar"><button class="pill'+(onlyWait?' on':'')+'" data-a="wait">Show only people not here yet</button></div>';
+    h += waitBar;
     const tiers = {};
     names.filter(n => ros[n] !== null).forEach(n => {
       const call = songs[ros[n]].start - CFG.callLeadMinutes;
@@ -155,7 +157,18 @@ function render() {
     const w = names.filter(n => ros[n] === null).sort();
     if (w.length) { h += '<h2>Walk-ins<small>not on the setlist</small></h2>';
       w.forEach(n => h += '<button class="row in" data-a="tog" data-n="'+esc(n)+'"><span class="box">✓</span><span class="l"><span class="nm">'+esc(n)+'</span></span></button>'); }
-    h += '<div class="add"><input id="addN" maxlength="100" placeholder="Add a walk-in or sub by name"><button class="pill go" data-a="add">Check in</button></div>';
+    h += addBar;
+  } else if (tab == 3) {
+    // every player on the setlist (plus walk-ins), A-Z, independent of song; same tap-to-check-in rows as tab 1
+    h += waitBar;
+    const all = names.slice().sort((a,b)=>a.localeCompare(b)), tin = all.filter(n => here.has(n)).length;
+    const l = onlyWait ? all.filter(n => !here.has(n)) : all;
+    h += '<h2>All players<small>'+tin+' / '+all.length+' here</small></h2>';
+    l.forEach(n => { const y = here.has(n), s = ros[n] === null ? null : songs[ros[n]];
+      h += '<button class="row'+(y?' in':'')+'" data-a="tog" data-n="'+esc(n)+'"><span class="box">'+(y?'✓':'')+'</span><span class="l"><span class="nm">'+esc(n)+'</span>'+
+        (s ? '<br><span class="meta">First song '+fmt(s.start)+' · '+esc(s.title)+'</span>' : '<br><span class="meta">Not on the setlist</span>')+'</span></button>'; });
+    if (!l.length) h += '<div class="empty">'+(all.length ? 'Everyone is here.' : 'Nobody yet.')+'</div>';
+    h += addBar;
   } else {
     h += '<div class="bar">'+[['all','All'],['rdy','Ready now'],['blk','Waiting on people']].map(([k,l]) => '<button class="pill'+(filt==k?' on':'')+'" data-a="f" data-k="'+k+'">'+l+'</button>').join('')+'</div>';
     let c = 0;
@@ -218,7 +231,7 @@ $('main').addEventListener('click', e => {
 });
 $('dOk').onclick = () => { const v = $('dS').value; if (v) setSub(dlgKey[0], dlgKey[1], v == '__clear' ? null : v); $('dlg').classList.remove('show'); };
 $('dNo').onclick = () => $('dlg').classList.remove('show');
-$('t1').onclick = () => { tab = 1; render(); }; $('t2').onclick = () => { tab = 2; render(); };
+$('t1').onclick = () => { tab = 1; render(); }; $('t2').onclick = () => { tab = 2; render(); }; $('t3').onclick = () => { tab = 3; render(); };
 
 /* ---------- start ---------- */
 (async () => {
