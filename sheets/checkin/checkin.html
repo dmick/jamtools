@@ -9,6 +9,7 @@
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:500 16px/1.35 Barlow,system-ui,-apple-system,Segoe UI,sans-serif;max-width:760px;margin:0 auto;padding:env(safe-area-inset-top,0) 14px calc(60px + env(safe-area-inset-bottom,0))}
 h1,h2,.tm,.stat b{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700;letter-spacing:.01em}
+.dt{display:flex;gap:8px;align-items:center;margin-top:8px}.dt input{font:inherit;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);min-width:0}.dt .pill{padding:7px 14px}
 header{position:sticky;top:0;background:var(--bg);padding:12px 0 8px;z-index:5}
 h1{font-size:28px;margin:0;line-height:1}.sub{color:var(--mute);font-size:13px;margin-top:2px}
 .stats{display:flex;gap:10px;margin:10px 0}.stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
@@ -37,6 +38,7 @@ h2{font-size:22px;margin:22px 0 8px;display:flex;justify-content:space-between;a
 .note{color:var(--mute);font-size:12.5px;margin-top:18px}
 </style></head><body>
 <header><h1 id="ttl">Jam Check-in</h1><div class="sub" id="sync">Loading…</div>
+<div class="dt"><input type="date" id="dp" aria-label="Event date"><button class="pill" id="dToday">Today</button></div>
 <div class="stats"><div class="stat"><b id="sA">0</b><span id="sAl">checked in</span></div><div class="stat"><b id="sB">0</b><span id="sBl">songs ready</span></div></div>
 <div class="tabs"><button id="t1" class="on">Check in by time</button><button id="t2">Songs</button><button id="t3">Check in by name</button></div></header>
 <main id="main"></main>
@@ -66,7 +68,12 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 const fmt = m => { const h = Math.floor(m/60)%24, mm = m%60; return ((h%12)||12)+':'+String(mm).padStart(2,'0')+(h<12?' AM':' PM'); };
 const toMin = t => { if (typeof t === 'number') return t; const m = /^(\d{1,2}):(\d{2})$/.exec(String(t||'')); return m ? (+m[1])*60 + (+m[2]) : null; };
 
-const date = new URLSearchParams(location.search).get('date') || '';
+const today = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); };
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const date = new URLSearchParams(location.search).get('date') || today();   // no ?date= means today (browser's local date)
+{ const q = new URLSearchParams(location.search);                            // keep the address shareable/reloadable
+  if (!q.get('date')) { q.set('date', date); history.replaceState(null, '', '?' + q); } }
+const goDate = d => { const q = new URLSearchParams(location.search); q.set('date', d); location.search = q.toString(); };
 let songs = [], here = new Set(), subs = {}, tab = 1, onlyWait = false, filt = 'all', online = false, dlgKey = null;
 
 /* ---------- setlist (CSV from the web service) ---------- */
@@ -231,11 +238,14 @@ $('main').addEventListener('click', e => {
 });
 $('dOk').onclick = () => { const v = $('dS').value; if (v) setSub(dlgKey[0], dlgKey[1], v == '__clear' ? null : v); $('dlg').classList.remove('show'); };
 $('dNo').onclick = () => $('dlg').classList.remove('show');
+$('dp').onchange = () => { if (DATE_RE.test($('dp').value) && $('dp').value !== date) goDate($('dp').value); };
+$('dToday').onclick = () => { if (today() !== date) goDate(today()); };
 $('t1').onclick = () => { tab = 1; render(); }; $('t2').onclick = () => { tab = 2; render(); }; $('t3').onclick = () => { tab = 3; render(); };
 
 /* ---------- start ---------- */
 (async () => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('main').innerHTML = '<div class="err">Add a date to the address, like ?date=2026-11-01</div>'; return; }
+  if (!DATE_RE.test(date)) { $('main').innerHTML = '<div class="err">That date isn’t valid. Pick one above, or use an address like ?date=2026-11-01</div>'; $('sync').textContent = ''; return; }
+  $('dp').value = date; $('sync').textContent = date;   // render() replaces the sync text once the setlist loads
   try { songs = await loadSetlist(); }
   catch (e) { $('main').innerHTML = '<div class="err">Couldn’t load the setlist from ' + esc(CFG.setlistUrl) + '. Check the connection (or CORS, see README) and reload.</div>'; return; }
   if (!songs.length) { $('main').innerHTML = '<div class="err">No setlist found for ' + esc(date) + '.</div>'; return; }
