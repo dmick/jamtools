@@ -74,7 +74,7 @@ const date = new URLSearchParams(location.search).get('date') || today();   // n
 { const q = new URLSearchParams(location.search);                            // keep the address shareable/reloadable
   if (!q.get('date')) { q.set('date', date); history.replaceState(null, '', '?' + q); } }
 const goDate = d => { const q = new URLSearchParams(location.search); q.set('date', d); location.search = q.toString(); };
-let songs = [], here = new Set(), subs = {}, tab = 1, onlyWait = false, filt = 'all', online = false, dlgKey = null;
+let songs = [], here = new Set(), subs = {}, tab = 1, onlyWait = false, filt = 'all', online = false, dlgKey = null, needLogin = false;
 
 /* ---------- setlist (CSV from the web service) ---------- */
 // Columns: date,songnum,song,artist,vocal,guitar1,guitar2,bass,drums,keys,keys2
@@ -144,7 +144,8 @@ function render() {
   $('sync').textContent = date + (online ? ' · live, shared with all organizers' : ' · offline, retrying…');
   const waitBar = '<div class="bar"><button class="pill'+(onlyWait?' on':'')+'" data-a="wait">Show only people not here yet</button></div>';
   const addBar = '<div class="add"><input id="addN" maxlength="100" placeholder="Add a walk-in or sub by name"><button class="pill go" data-a="add">Check in</button></div>';
-  let h = '';
+  const loginBar = needLogin ? '<div class="bar"><button class="pill go" data-a="login">Log in to edit</button><span class="sub">Changes need an organizer login.</span></div>' : '';
+  let h = loginBar;
   if (tab == 1) {
     h += waitBar;
     const tiers = {};
@@ -206,7 +207,7 @@ async function poll() {
   } catch (e) { online = false; }
   render();
 }
-const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(Object.assign({ date }, body)) }).then(poll, () => { online = false; poll(); });
+const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(Object.assign({ date }, body)) }).then(poll, e => { if (/40[13]/.test(e.message)) needLogin = true; online = false; poll(); });
 function toggle(name) {
   const on = !here.has(name);
   on ? here.add(name) : here.delete(name); render();        // optimistic; poll() corrects it
@@ -225,6 +226,7 @@ $('main').addEventListener('click', e => {
   else if (a == 'wait') { onlyWait = !onlyWait; render(); }
   else if (a == 'reload') { b.textContent = 'Reloading…'; loadSetlist().then(l => { if (l.length) songs = l; render(); }, () => { b.textContent = 'Reload failed – tap to retry'; }); }
   else if (a == 'f') { filt = b.dataset.k; render(); }
+  else if (a == 'login') { needLogin = false; location.href = CFG.apiBase + '/login'; }
   else if (a == 'add') { const v = $('addN').value.trim(); if (v && !here.has(v)) toggle(v); }
   else if (a == 'sub') {
     const song = songs[+b.dataset.i], role = b.dataset.r; dlgKey = [song, role];
