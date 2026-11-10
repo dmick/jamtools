@@ -14,6 +14,7 @@ header{position:sticky;top:0;background:var(--bg);padding:12px 0 8px;z-index:5}
 h1{font-size:28px;margin:0;line-height:1}.sub{color:var(--mute);font-size:13px;margin-top:2px}
 .stats{display:flex;gap:10px;margin:10px 0}.stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
 .stat b{font-size:30px;line-height:1;color:var(--amber)}.stat span{display:block;color:var(--mute);font-size:13px}
+.mv{display:flex;flex-direction:column;gap:4px;margin-left:6px}.mv button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:2px 8px;cursor:pointer}.mv button:disabled{opacity:.3}.tm small{font-size:11px;opacity:.7}
 .tabs{display:flex;gap:6px}.tabs button,.pill{font:600 15px Barlow,sans-serif;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;border-radius:999px;cursor:pointer}
 .tabs button{flex:1;min-width:0;padding-left:8px;padding-right:8px}.on,.pill.go{background:var(--amber)!important;color:#111!important;border-color:var(--amber)!important}
 .bar{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center}
@@ -74,7 +75,7 @@ const date = new URLSearchParams(location.search).get('date') || today();   // n
 { const q = new URLSearchParams(location.search);                            // keep the address shareable/reloadable
   if (!q.get('date')) { q.set('date', date); history.replaceState(null, '', '?' + q); } }
 const goDate = d => { const q = new URLSearchParams(location.search); q.set('date', d); location.search = q.toString(); };
-let songs = [], here = new Set(), subs = {}, tab = 1, onlyWait = false, filt = 'all', online = false, dlgKey = null, needLogin = false;
+let baseSongs = [], order = [], songs = [], here = new Set(), subs = {}, tab = 1, onlyWait = false, filt = 'all', online = false, dlgKey = null, needLogin = false;
 
 /* ---------- setlist (CSV from the web service) ---------- */
 // Columns: date,songnum,song,artist,vocal,guitar1,guitar2,bass,drums,keys,keys2
@@ -114,12 +115,27 @@ async function loadSetlist() {
     .map((row, i) => ({ n: parseFloat(get(row, 'songnum')), i, row }))
     .sort((a, b) => ((isNaN(a.n) ? a.i : a.n) - (isNaN(b.n) ? b.i : b.n)) || a.i - b.i)
     .map(({ row }, idx) => ({
-      title: get(row, 'song'), artist: get(row, 'artist'),
+      title: get(row, 'song'), orig: idx, artist: get(row, 'artist'),
       start: base + idx * CFG.minutesPerSong,
       players: { vox: get(row, 'vocal'), g1: get(row, 'guitar1'), g2: get(row, 'guitar2'), bass: get(row, 'bass'),
                  drums: get(row, 'drums'), keys: get(row, 'keys'), keys2: get(row, 'keys2') }
     }))
     .filter(s => s.title);
+}
+
+/* ---------- running order (shared; the original setlist in baseSongs is never changed) ---------- */
+function applyOrder() {
+  const pos = new Map(order.map((t, i) => [t, i]));
+  const rank = s => pos.has(s.title) ? pos.get(s.title) : order.length + s.orig;   // unlisted songs keep original order, after
+  const base = toMin(CFG.startTime) ?? 1080;
+  songs = baseSongs.slice().sort((a, b) => rank(a) - rank(b))
+    .map((s, i) => Object.assign({}, s, { start: base + i * CFG.minutesPerSong }));
+}
+function move(i, d) {
+  const j = i + d; if (j < 0 || j >= songs.length) return;
+  const t = songs.map(s => s.title); [t[i], t[j]] = [t[j], t[i]];
+  order = t; applyOrder(); render();
+  post('/order', { order });
 }
 
 /* ---------- derived state ---------- */
@@ -191,14 +207,15 @@ function render() {
     let c = 0;
     songs.forEach((song, i) => { const x = st[i];
       if ((filt == 'rdy' && !x.ready) || (filt == 'blk' && x.ready)) return; c++;
-      h += '<div class="card'+(x.ready?' rdy':'')+'"><div class="top"><span class="tm">'+fmt(song.start)+'</span><span><div class="ttl">'+esc(song.title)+'</div><div class="art">'+esc(song.artist)+'</div></span><span class="tag">'+(x.ready?'Ready':x.miss.length+' missing')+'</span></div><div class="chips">'+
+      h += '<div class="card'+(x.ready?' rdy':'')+'"><div class="top"><span class="tm">'+fmt(song.start)+(song.orig !== i ? '<br><small>was #'+(song.orig+1)+'</small>' : '')+'</span><span><div class="ttl">'+esc(song.title)+'</div><div class="art">'+esc(song.artist)+'</div></span><span class="tag">'+(x.ready?'Ready':x.miss.length+' missing')+'</span>'+
+        '<span class="mv"><button data-a="mv" data-i="'+i+'" data-d="-1"'+(i==0?' disabled':'')+' aria-label="Move earlier">▲</button><button data-a="mv" data-i="'+i+'" data-d="1"'+(i==songs.length-1?' disabled':'')+' aria-label="Move later">▼</button></span></div><div class="chips">'+
         x.sl.map(q => { const lab = '<i>'+q.label+'</i>', k = esc(subKey(song, q.k));
           if (!q.name) return '<button class="chip op" data-a="sub" data-i="'+i+'" data-r="'+q.k+'">'+lab+'Open – assign</button>';
           return here.has(q.name) ? '<span class="chip ok">'+lab+esc(q.name)+(q.sub?' (sub)':'')+'</span>'
             : '<button class="chip no" data-a="sub" data-i="'+i+'" data-r="'+q.k+'">'+lab+esc(q.name)+' – not here · tap to sub</button>'; }).join('')+'</div></div>'; });
     if (!c) h += '<div class="empty">Nothing here yet.</div>';
   }
-  h += '<div class="bar"><button class="pill" data-a="reload">Reload setlist</button></div><div class="note">Blank Vox, G1, Bass or Drums counts as an open spot that blocks a song. Blank G2, Keys or Keys 2, or "XX", means not needed. Song times are estimated from the start time.</div>';
+  h += '<div class="bar"><button class="pill" data-a="reload">Reload setlist</button>'+(tab==2&&order.length?'<button class="pill" data-a="reset">Restore original order</button>':'')+'</div><div class="note">Blank Vox, G1, Bass or Drums counts as an open spot that blocks a song. Blank G2, Keys or Keys 2, or "XX", means not needed. Song times are estimated from the start time.</div>';
   const y = scrollY; $('main').innerHTML = h; scrollTo(0, y);
 }
 
@@ -213,6 +230,7 @@ async function poll() {
   try {
     const s = await api('/state?date=' + encodeURIComponent(date));
     here = new Set(s.here); subs = s.subs || {}; online = true;
+    const o = s.order || []; if (JSON.stringify(o) !== JSON.stringify(order)) { order = o; applyOrder(); }
   } catch (e) { online = false; }
   render();
 }
@@ -233,7 +251,9 @@ $('main').addEventListener('click', e => {
   const b = e.target.closest('[data-a]'); if (!b) return; const a = b.dataset.a;
   if (a == 'tog') toggle(b.dataset.n);
   else if (a == 'wait') { onlyWait = !onlyWait; render(); }
-  else if (a == 'reload') { b.textContent = 'Reloading…'; loadSetlist().then(l => { if (l.length) songs = l; render(); }, () => { b.textContent = 'Reload failed – tap to retry'; }); }
+  else if (a == 'reload') { b.textContent = 'Reloading…'; loadSetlist().then(l => { if (l.length) { baseSongs = l; applyOrder(); } render(); }, () => { b.textContent = 'Reload failed – tap to retry'; }); }
+  else if (a == 'mv') move(+b.dataset.i, +b.dataset.d);
+  else if (a == 'reset') { if (confirm('Restore the original setlist order?')) { order = []; applyOrder(); render(); post('/order', { order: [] }); } }
   else if (a == 'f') { filt = b.dataset.k; render(); }
   else if (a == 'login') { needLogin = false; location.href = CFG.apiBase + '/login'; }
   else if (a == 'add') { const v = $('addN').value.trim(); if (v && !here.has(v)) toggle(v); }
@@ -257,11 +277,12 @@ $('t1').onclick = () => { tab = 1; render(); }; $('t2').onclick = () => { tab = 
 (async () => {
   if (!DATE_RE.test(date)) { $('main').innerHTML = '<div class="err">That date isn’t valid. Pick one above, or use an address like ?date=2026-11-01</div>'; $('sync').textContent = ''; return; }
   $('dp').value = date; $('sync').textContent = date;   // render() replaces the sync text once the setlist loads
-  try { songs = await loadSetlist(); }
+  try { baseSongs = await loadSetlist(); songs = baseSongs; }
   catch (e) { $('main').innerHTML = '<div class="err">Couldn’t load the setlist from ' + esc(CFG.setlistUrl) + '. Check the connection (or CORS, see README) and reload.</div>'; return; }
-  if (!songs.length) { $('main').innerHTML = '<div class="err">No setlist found for ' + esc(date) + '.</div>'; return; }
+  if (!baseSongs.length) { $('main').innerHTML = '<div class="err">No setlist found for ' + esc(date) + '.</div>'; return; }
+  await poll(); applyOrder();
   $('ttl').textContent = 'Jam Check-in'; document.title = 'Jam Check-in ' + date;
-  await poll(); setInterval(poll, CFG.pollMs);
+  render(); setInterval(poll, CFG.pollMs);
   document.addEventListener('visibilitychange', poll);
 })();
 </script></body></html>

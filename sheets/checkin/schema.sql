@@ -14,3 +14,10 @@ CREATE TABLE IF NOT EXISTS subs (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (event_date, slot_key)
 );
+
+-- Reordered running order for a date (JSON array of song titles). No row = original setlist order.
+CREATE TABLE IF NOT EXISTS setlist_order (
+  event_date TEXT PRIMARY KEY,
+  titles     TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

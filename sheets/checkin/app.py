@@ -3,6 +3,7 @@
 Run behind nginx:  gunicorn -w 2 -b 127.0.0.1:8081 app:app
 Config (env):      CHECKIN_DB  path to the sqlite file (default /var/lib/jam-checkin/checkin.db)
 """
+import json
 import os
 import re
 import sqlite3
@@ -52,7 +53,8 @@ def state():
     db = get_db()
     here = [r["name"] for r in db.execute("SELECT name FROM checkins WHERE event_date=?", (date,))]
     subs = {r["slot_key"]: r["name"] for r in db.execute("SELECT slot_key, name FROM subs WHERE event_date=?", (date,))}
-    return jsonify(here=here, subs=subs)
+    row = db.execute("SELECT titles FROM setlist_order WHERE event_date=?", (date,)).fetchone()
+    return jsonify(here=here, subs=subs, order=json.loads(row["titles"]) if row else [])
 
 
 @app.post("/api/checkin/here")
@@ -88,6 +90,26 @@ def sub():
             "ON CONFLICT(event_date, slot_key) DO UPDATE SET name=excluded.name, updated_at=datetime('now')",
             (date, key, name),
         )
+    db.commit()
+    return jsonify(ok=True)
+
+
+@app.post("/api/checkin/order")
+def order():
+    body = request.get_json(silent=True) or {}
+    date, titles = body.get("date", ""), body.get("order")
+    if (not DATE_RE.match(str(date)) or not isinstance(titles, list) or len(titles) > 200
+            or not all(isinstance(t, str) and 0 < len(t) <= 200 for t in titles)):
+        return jsonify(error="bad request"), 400
+    db = get_db()
+    if titles:
+        db.execute(
+            "INSERT INTO setlist_order (event_date, titles) VALUES (?, ?) "
+            "ON CONFLICT(event_date) DO UPDATE SET titles=excluded.titles, updated_at=datetime('now')",
+            (date, json.dumps(titles)),
+        )
+    else:                                             # empty = back to the original order
+        db.execute("DELETE FROM setlist_order WHERE event_date=?", (date,))
     db.commit()
     return jsonify(ok=True)
 
