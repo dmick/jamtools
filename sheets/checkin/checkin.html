@@ -91,10 +91,19 @@ function parseCSV(text) {                       // handles quoted fields, "" esc
   row.push(f); if (row.some(x => x.trim() !== '')) rows.push(row);
   return rows;
 }
+const CACHE_KEY = 'jam-setlist-' + date;       // last good CSV, so the page still works if the service is unreachable
 async function loadSetlist() {
-  const r = await fetch(CFG.setlistUrl + '?date=' + encodeURIComponent(date), { cache: 'no-store' });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  const rows = parseCSV((await r.text()).replace(/^\uFEFF/, ''));
+  let text;
+  try {
+    const r = await fetch(CFG.setlistUrl + '?date=' + encodeURIComponent(date), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    text = await r.text();
+    try { localStorage.setItem(CACHE_KEY, text); } catch (_) {}
+  } catch (e) {
+    try { text = localStorage.getItem(CACHE_KEY); } catch (_) {}
+    if (text == null) throw e;
+  }
+  const rows = parseCSV(text.replace(/^\uFEFF/, ''));
   if (rows.length < 2) return [];
   const head = rows[0].map(h => h.trim().toLowerCase()), col = n => head.indexOf(n);
   const get = (row, n) => { const i = col(n); return i < 0 || row[i] == null ? '' : row[i].trim(); };
