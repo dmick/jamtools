@@ -3,7 +3,9 @@ from fastapi import FastAPI, Response
 from fastapi.responses import PlainTextResponse, HTMLResponse
 import csv
 import io
+import json
 
+from googleapiclient.errors import HttpError
 from lyrics_utils import do_fetch_setlist, format_setlist, input_form, fetch_override
 import set_utils
 
@@ -41,6 +43,43 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
+def alert_html(msg: str) -> str:
+    """A <script>alert(...)</script> snippet; msg may hold quotes, newlines or markup."""
+    return '<script>alert(' + json.dumps(msg).replace('</', '<\\/') + ')</script>'
+
+
+class SetLookupError(Exception):
+    def __init__(self, message: str, status: int):
+        super().__init__(message)
+        self.message, self.status = message, status
+
+
+@app.exception_handler(SetLookupError)
+async def set_lookup_error(request, exc: SetLookupError):
+    # /setlist_full is fetched by other programs, so give them plain text
+    if request.url.path == '/setlist_full':
+        return PlainTextResponse(exc.message, status_code=exc.status)
+    return HTMLResponse(alert_html(exc.message), status_code=exc.status)
+
+
+def find_set_checked(sheetid, date) -> list[dict]:
+    """set_utils.find_set, with bad input and Google API failures turned into SetLookupError."""
+    if date:
+        try:
+            set_utils.date_to_int(date)
+        except ValueError:
+            raise SetLookupError(f'Bad date: {date}', 400)
+    try:
+        return set_utils.find_set(sheetid, None, date)
+    except HttpError as e:
+        log.exception(f'sheet lookup failed {sheetid=} {date=}')
+        status = getattr(e.resp, 'status', None)
+        if status in (403, 404):
+            raise SetLookupError('Could not open that spreadsheet (not found or not shared)', 404)
+        raise SetLookupError('Could not read the spreadsheet right now; try again', 502)
+
+
 @app.get('/lyrics')
 async def do_lyrics(
     setlist: str|None = None,
@@ -59,10 +98,9 @@ async def do_lyrics(
 
     set_with_lyrics: list[dict] = []
     if date or sheetid:
-        rows = set_utils.find_set(sheetid, None, date)
+        rows = find_set_checked(sheetid, date)
         if not rows:
-            dialog = f'<script>alert("Oops, no set found for {date}")</script>'
-            return HTMLResponse(content=dialog)
+            return HTMLResponse(content=alert_html(f'Oops, no set found for {date or sheetid}'))
         set_with_lyrics = [{'song' :r.get('song'), 'artist': r.get('artist'), 'lyrics':None} for r in rows]
     elif setlist:
         setlist_lines = setlist.split('\n')
@@ -71,8 +109,14 @@ async def do_lyrics(
             if len(sl) == 0:
                 continue
             log.info(f'setlist input: {sl}')
-            song, artist = sl.split(',')
-            set_with_lyrics.append({'song':song, 'artist':artist, 'lyrics': None})
+            # "song,artist" per line; csv rules so that "Hello, Goodbye",Beatles works
+            try:
+                fields = next(csv.reader([sl]))
+            except (csv.Error, StopIteration):
+                fields = []
+            if len(fields) != 2 or not fields[0].strip() or not fields[1].strip():
+                raise SetLookupError(f'Expected "song,artist" on each line, got: {sl}', 400)
+            set_with_lyrics.append({'song': fields[0].strip(), 'artist': fields[1].strip(), 'lyrics': None})
 
     # load any cached lyrics
     if not nocache:
@@ -82,7 +126,7 @@ async def do_lyrics(
                 if song and artist:
                     results = session.exec(
                         select(Lyrics).where(
-                            Lyrics.song == song and
+                            Lyrics.song == song,
                             Lyrics.artist == artist
                         )
                     )
@@ -92,21 +136,23 @@ async def do_lyrics(
 
                     # whether or not we found it, look for overrides
                     mtime, override_lyrics = fetch_override(song, artist)
-                    if override_lyrics and (
-                        (not db_obj or not db_obj.lyrics) or
-                        (mtime > db_obj.mtime)
-                        ):
-                        log.info(f'replacing {song}, {artist} {db_obj.mtime} with override lyrics from {mtime.isoformat()}')
-                        new_obj = Lyrics(
-                            song=song,
-                            artist=artist,
-                            lyrics=override_lyrics,
-                            mtime = mtime)
-                        row['lyrics'] = override_lyrics
-                        session.merge(new_obj)
-                        session.commit()
+                    if override_lyrics:
+                        db_mtime = getattr(db_obj, 'mtime', None)
+                        if (
+                           (not db_obj or not db_obj.lyrics) or
+                           (not db_mtime or (mtime > db_obj.mtime))
+                           ):
+                            log.info(f'replacing {song}, {artist} {db_mtime.isoformat() if db_mtime else ''} with override lyrics {mtime.isoformat()}')
+                            new_obj = Lyrics(
+                                song=song,
+                                artist=artist,
+                                lyrics=override_lyrics,
+                                mtime = mtime)
+                            row['lyrics'] = override_lyrics
+                            session.merge(new_obj)
+                            session.commit()
     else:
-        log.info(f'Nocache set, not using db')
+        log.info('Nocache set, not using db')
 
     # fetch any that are not already set
     failures, fetched_set = do_fetch_setlist(set_with_lyrics)
@@ -122,7 +168,7 @@ async def do_lyrics(
                     lyrics=newrow['lyrics'],
                     mtime=datetime.now()
                 )
-                log.info(f'persisting new lyrics for {newrow["song"]} {newrow["artist"]} {mtime}')
+                log.info(f'persisting new lyrics for {newrow["song"]} {newrow["artist"]}')
 
                 merged = session.merge(obj)
                 session.add(merged)
@@ -131,8 +177,7 @@ async def do_lyrics(
     formatted_lyrics = format_setlist(fetched_set, dohtml)
 
     if failures:
-        failures = '\\n'.join((['NOT_FOUND:\\n'] + failures))
-        dialog = f'<script>alert("{failures}")</script>'
+        dialog = alert_html('\n'.join(['NOT_FOUND:', ''] + failures))
     else:
         dialog = ''
     response = HTMLResponse(content=dialog + formatted_lyrics)
@@ -149,19 +194,15 @@ async def do_setlist(
     if not (date or sheetid):
         return HTMLResponse(input_form('/setlist', dateonly=True))
 
-    rows = set_utils.find_set(sheetid, None, date)
+    rows = find_set_checked(sheetid, date)
     if not rows:
-        dialog = f'<script>alert("Oops, no set found for {date}")</script>'
-        return HTMLResponse(content=dialog)
+        return HTMLResponse(content=alert_html(f'Oops, no set found for {date or sheetid}'))
 
-    def poss_quote(s):
-        if s and ',' in s:
-            return f'"{s}"'
-        return s
-
-    setlist = [
-        f'{poss_quote(row.get("song"))},{poss_quote(row.get("artist"))}' for row in rows
-    ]
+    # csv quoting (incl. embedded quotes) so the output can be pasted back into /lyrics
+    buf = io.StringIO()
+    csv.writer(buf, lineterminator='\n').writerows(
+        [(row.get('song') or '', row.get('artist') or '') for row in rows])
+    setlist = buf.getvalue().splitlines()
     setlist.append('')
     setlist.extend([f'{row.get("artist")} - {row.get("song")}' for row in rows])
     setlist.append('')
@@ -180,9 +221,9 @@ async def do_setlist_full(
     if not (date or sheetid):
         return HTMLResponse(input_form('/setlist_full', dateonly=True))
 
-    rows = set_utils.find_set(sheetid, None, date)
+    rows = find_set_checked(sheetid, date)
     if not rows:
-        return PlainTextResponse(content=f'no set found for {date}', status_code=404)
+        return PlainTextResponse(content=f'no set found for {date or sheetid}', status_code=404)
 
     # fixed header, so every row (and every set) has the same columns
     buf = io.StringIO()
