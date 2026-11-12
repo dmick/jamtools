@@ -5,7 +5,7 @@ windows (30 min before their first song), shows which songs are playable vs. wai
 and lets you assign a sub or mark a part "not needed". State is shared between everyone who opens
 the page and kept in SQLite, one set of rows per event date.
 
-Open it as `https://yoursite/checkin/checkin.html?date=2026-11-01`. With no `date` it uses today's date (from the
+Open it as `https://yoursite/checkin?date=2026-11-01` (`/checkin/` and `/checkin/checkin.html` work too). With no `date` it uses today's date (from the
 browser's clock). The date picker under the title switches to another event date (it reloads the page with `?date=`
 set, keeping any `start`/`mins` overrides); "Today" jumps back.
 
