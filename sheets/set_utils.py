@@ -66,8 +66,17 @@ class Form(Enum):
 
 form_to_range: dict[Form, list[str]] = {
     Form.SIMPLE: ['A1:B1', 'A3:B',],
-    Form.BAND: ['C1:L1', 'C3:L',],
+    Form.BAND: ['B1:L1', 'B3:L',],   # B is TIME; fields are found by header name
 }
+
+# the columns of a Monday Live sheet, for callers (e.g. the /nextshow page) that want
+# everything the sheet shows, not just the default FIELDS
+PAGE_FIELDS: list[str|tuple[str, ...]] = [
+    'TIME', 'SONG', 'ARTIST', 'VOCAL', 'GUITAR 1', 'GUITAR 2', 'BASS', 'DRUMS', 'KEYS', 'NOTES',
+]
+
+# In BAND layout the range starts at column B, so song/artist are at these offsets
+_SONG, _ARTIST = 1, 2
 
 
 def end_of_songs(songs: list[list[str]], i: int, form: Form) -> bool:
@@ -78,6 +87,9 @@ def end_of_songs(songs: list[list[str]], i: int, form: Form) -> bool:
         # defined: list is empty if all elements are empty or whitespace
         ltext = ''.join([i.strip() for i in l])
         return not ltext
+
+    def cell(l, i):
+        return l[i] if i < len(l) else ''
 
     s: list[str] = songs[i]
     if i+1 < len(songs):
@@ -96,17 +108,27 @@ def end_of_songs(songs: list[list[str]], i: int, form: Form) -> bool:
             return True
 
         # row has no song/artist, and neither does next row
-        if empty(s[0:2]) and empty(ns[0:2]):
+        if empty(s[_SONG:_ARTIST+1]) and empty(ns[_SONG:_ARTIST+1]):
             return True
 
         # ..or Tune to recorded tuning
-        if ns and (ns[0].startswith('Tune to') or ('Original Key' in ns[0])):
+        if ns and (cell(ns, _SONG).startswith('Tune to') or ('Original Key' in cell(ns, _SONG))):
             return True
 
     return False
 
 
-def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
+def get_rows(sheetdate: str, sheetid: str,
+              fields: list[str|tuple[str, ...]]|None = None,
+              clean_xx: bool = True) -> list[dict[str, str]]:
+    """
+    Rows of the setlist on sheet sheetid, as dicts keyed by cleanfields() names.
+
+    fields: header names to extract, in output order (a (name, newname) tuple renames);
+    default is the FIELDS entry for sheetdate.  Names not in the sheet are skipped,
+    and trailing empty cells may be missing from a row's dict.
+    clean_xx: strip the 'XX' (nobody playing) placeholder from values.
+    """
 
     # may throw HttpError
     colnames: list[str]
@@ -123,7 +145,7 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
     for setnum in colA:
         if not setnum:
             continue
-        if setnum == ['1']:
+        if stripws(setnum) == ['1']:
             found_1_as_first = True
             break
         if setnum[0].strip() != '':
@@ -147,8 +169,8 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
     # column names we're ignoring
     #
     # rename some fields (noted in tuples in FIELDS
-    fields: list[str|tuple[str, ...]]
-    fields = FIELDS.get(sheetdate, FIELDS['Default'])
+    if fields is None:
+        fields = FIELDS.get(sheetdate, FIELDS['Default'])
     colnums: list[int] = []
     ofields = SYNTHESIZED_FIELDS.copy()
 
@@ -185,7 +207,7 @@ def get_rows(sheetdate: str, sheetid: str) -> list[dict[str, str]]:
         # do some domain-specific value cleanup
         ovalues = []
         for v in values:
-            if isinstance(v, str):
+            if clean_xx and isinstance(v, str):
                 v = v.replace('XX', '')
             ovalues.append(v)
 
@@ -242,3 +264,36 @@ def find_set(sheetid, start, date):
                 rows += get_rows(sheetdate, sheetid)
 
     return rows
+
+
+def get_banner(sheetid: str) -> str:
+    """The event name in row 2 of a Monday Live sheet ("Last Call Live 2.0 vol6"), or ''."""
+    for row in get_and_retry_on_rate_limit(sheetid, 'A2:Z2'):
+        for cell in row:
+            if cell.strip():
+                return cell.strip()
+    return ''
+
+
+def today_int() -> int:
+    now = datetime.datetime.now(tz=datetime.timezone(-datetime.timedelta(hours=6)))
+    return date_to_int(now.strftime("%Y-%m-%d"))
+
+
+def find_next_set() -> tuple[str, str] | None:
+    """(date, sheetid) of the first show today or later, per the master date/sheet list; None if there is none."""
+    today = today_int()
+    best: tuple[int, str, str] | None = None
+    for idrow in get_and_retry_on_rate_limit(config.ALL_SETLISTS_SHEETID, 'A:B'):
+        if not idrow:
+            break
+        if len(idrow) < 2:
+            continue
+        sheetdate, sheetid = idrow[0].strip(), idrow[1].strip()
+        try:
+            d = date_to_int(sheetdate)
+        except ValueError:
+            continue    # stray junk rows
+        if d >= today and (best is None or d < best[0]):
+            best = (d, sheetdate, sheetid)
+    return best[1:] if best else None

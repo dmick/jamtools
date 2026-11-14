@@ -8,10 +8,12 @@ import json
 from googleapiclient.errors import HttpError
 from lyrics_utils import do_fetch_setlist, format_setlist, input_form, fetch_override
 import set_utils
+import nextshow_html
 
 from sqlmodel import SQLModel, create_engine, Field, Session, select
 from typing import Optional
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+import time
 import config
 
 import logging
@@ -63,6 +65,19 @@ async def set_lookup_error(request, exc: SetLookupError):
     return HTMLResponse(alert_html(exc.message), status_code=exc.status)
 
 
+@contextmanager
+def sheet_errors(what: str):
+    """Turn Google API failures inside the block into SetLookupError."""
+    try:
+        yield
+    except HttpError as e:
+        log.exception(f'sheet lookup failed {what}')
+        status = getattr(e.resp, 'status', None)
+        if status in (403, 404):
+            raise SetLookupError('Could not open that spreadsheet (not found or not shared)', 404)
+        raise SetLookupError('Could not read the spreadsheet right now; try again', 502)
+
+
 def find_set_checked(sheetid, date) -> list[dict]:
     """set_utils.find_set, with bad input and Google API failures turned into SetLookupError."""
     if date:
@@ -70,14 +85,8 @@ def find_set_checked(sheetid, date) -> list[dict]:
             set_utils.date_to_int(date)
         except ValueError:
             raise SetLookupError(f'Bad date: {date}', 400)
-    try:
+    with sheet_errors(f'{sheetid=} {date=}'):
         return set_utils.find_set(sheetid, None, date)
-    except HttpError as e:
-        log.exception(f'sheet lookup failed {sheetid=} {date=}')
-        status = getattr(e.resp, 'status', None)
-        if status in (403, 404):
-            raise SetLookupError('Could not open that spreadsheet (not found or not shared)', 404)
-        raise SetLookupError('Could not read the spreadsheet right now; try again', 502)
 
 
 @app.get('/lyrics')
@@ -235,3 +244,36 @@ async def do_setlist_full(
     response = PlainTextResponse(content=buf.getvalue(), media_type='text/csv')
     response.charset = 'utf-8'
     return response
+
+
+NEXTSHOW_TTL = 60   # seconds; keeps page views from each costing several Sheets API calls
+_nextshow_cache: tuple[float, str] | None = None
+
+
+def build_nextshow() -> str:
+    with sheet_errors('nextshow'):
+        found = set_utils.find_next_set()
+        if not found:
+            raise SetLookupError('No upcoming show found', 404)
+        date, sheetid = found
+        rows = set_utils.get_rows(date, sheetid, fields=set_utils.PAGE_FIELDS, clean_xx=False)
+        banner = set_utils.get_banner(sheetid)
+    return nextshow_html.render(banner, date, rows)
+
+
+# plain def: FastAPI runs it in a worker thread, so the blocking Sheets calls don't stall the event loop
+@app.get('/nextshow')
+def do_nextshow() -> Response:
+    global _nextshow_cache
+    now = time.monotonic()
+    if _nextshow_cache and now - _nextshow_cache[0] < NEXTSHOW_TTL:
+        return HTMLResponse(_nextshow_cache[1])
+    try:
+        page = build_nextshow()
+    except SetLookupError:
+        if _nextshow_cache:     # Google hiccup: better a slightly stale page than none
+            log.warning('nextshow refresh failed; serving stale copy')
+            return HTMLResponse(_nextshow_cache[1])
+        raise
+    _nextshow_cache = (now, page)
+    return HTMLResponse(page)
