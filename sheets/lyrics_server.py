@@ -256,7 +256,8 @@ def build_nextshow() -> str:
         if not found:
             raise SetLookupError('No upcoming show found', 404)
         date, sheetid = found
-        rows = set_utils.get_rows(date, sheetid, fields=set_utils.PAGE_FIELDS, clean_xx=False)
+        rows = set_utils.get_rows(date, sheetid, fields=set_utils.PAGE_FIELDS, clean_xx=False,
+                                 fold_unnamed_into='NOTES')
         banner = set_utils.get_banner(sheetid)
     return nextshow_html.render(banner, date, rows)
 

@@ -120,7 +120,8 @@ def end_of_songs(songs: list[list[str]], i: int, form: Form) -> bool:
 
 def get_rows(sheetdate: str, sheetid: str,
               fields: list[str|tuple[str, ...]]|None = None,
-              clean_xx: bool = True) -> list[dict[str, str]]:
+              clean_xx: bool = True,
+              fold_unnamed_into: str|None = None) -> list[dict[str, str]]:
     """
     Rows of the setlist on sheet sheetid, as dicts keyed by cleanfields() names.
 
@@ -128,6 +129,9 @@ def get_rows(sheetdate: str, sheetid: str,
     default is the FIELDS entry for sheetdate.  Names not in the sheet are skipped,
     and trailing empty cells may be missing from a row's dict.
     clean_xx: strip the 'XX' (nobody playing) placeholder from values.
+    fold_unnamed_into: header name (e.g. 'NOTES') of the field that should absorb any
+    text found in columns that have no header at all, joined with ' — ', rather than
+    those columns being dropped.
     """
 
     # may throw HttpError
@@ -190,6 +194,9 @@ def get_rows(sheetdate: str, sheetid: str,
 
     ofields = cleanfields(ofields)
 
+    # content of columns with no header name is folded into foldkey, if asked
+    foldkey = cleanfields([fold_unnamed_into])[0] if fold_unnamed_into else None
+
     rows = []
 
     songs = get_and_retry_on_rate_limit(sheetid, datarange)
@@ -212,7 +219,17 @@ def get_rows(sheetdate: str, sheetid: str,
             ovalues.append(v)
 
         # row will have a subset of all the fields in ALLFIELDS
-        rows.append(dict(t for t in zip(ofields, ovalues)))
+        row = dict(t for t in zip(ofields, ovalues))
+
+        if foldkey:
+            extra = [v for i, v in enumerate(s) if v and (i >= len(colnames) or not colnames[i])]
+            if clean_xx:
+                extra = [x.replace('XX', '') for x in extra]
+            extra = [x for x in extra if x]
+            if extra:
+                row[foldkey] = ' — '.join(x for x in [row.get(foldkey, '')] + extra if x)
+
+        rows.append(row)
 
     return rows
 
